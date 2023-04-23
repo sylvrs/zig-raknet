@@ -35,6 +35,22 @@ The library can be installed using Zig's in-progress package manager:
 }
 ```
 
+```js
+// build.zig
+pub fn build(b: *std.Build) void {
+    const target = b.standardTargetOptions(.{});
+    const optimize = b.standardOptimizeOption(.{});
+    // add the dependency to the build script
+    const network_module = b.dependency("network", .{ .target = target, .optimize = optimize }).module("network");
+    const raknet_module = b.dependency("raknet", .{ .target = target, .optimize = optimize }).module("raknet");
+    // ...
+    // your executable should be defined already
+    // i'll be using the name "executable" for the sake of this example
+    executable.addModule("raknet", module);
+    executable.addModule("network", network_module);
+}
+```
+
 ## Usage
 
 Example usage of the library can be found in the `examples` directory. Here is what a simple server looks like:
