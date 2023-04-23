@@ -69,7 +69,7 @@ pub fn main() !void {
         try server_name.toString(arena.allocator()),
         guid,
         .{
-            .address = .{ .ipv4 = try network.Address.IPv4.parse("127.0.0.1") },
+            .address = .{ .ipv4 = try network.Address.IPv4.parse("0.0.0.0") },
             .port = 19132,
         },
     );
