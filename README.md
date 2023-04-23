@@ -6,7 +6,7 @@ A simple RakNet server implementation in the [Zig](https://ziglang.org) programm
 
 Example usage of the library can be found in the `examples` directory. Here is what a simple server looks like:
 
-```c
+```js
 pub fn main() !void {
     // create a server
     var server = try raknet.Server.init(
