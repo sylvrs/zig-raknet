@@ -68,7 +68,7 @@ pub const OfflineMessage = union(OfflineMessageIds) {
     }
 
     pub fn encode(self: OfflineMessage, writer: anytype) !void {
-        switch (self) {
+        return switch (self) {
             .UnconnectedPong => {
                 try writer.writeByte(OfflineMessageIds.UnconnectedPong.toByte());
                 try writer.writeIntBig(i64, self.UnconnectedPong.pong_time);
@@ -78,7 +78,7 @@ pub const OfflineMessage = union(OfflineMessageIds) {
                 try writer.writeAll(self.UnconnectedPong.server_name);
             },
             else => error.UnsupportedOfflineMessageId,
-        }
+        };
     }
 
     /// Custom formatter for OfflineMessage.
