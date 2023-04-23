@@ -23,6 +23,14 @@ The library can be installed using Zig's in-progress package manager:
             // still very much so an *in-progress* project.
             .hash = "HASHED_VALUE_HERE",
         },
+        // zig-network is used for networking
+        //
+        // in the future, there will be no need to install this package as the useful parts
+        // of the library will be exposed in zig-raknet
+        .network = .{
+            .url = "https://github.com/sylvrs/zig-raknet/archive/refs/heads/master.tar.gz",
+            .hash = "HASHED_VALUE_HERE",
+        },
     },
 }
 ```
