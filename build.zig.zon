@@ -1,0 +1,10 @@
+.{
+    .name = "raknet",
+    .version = "0.1.0",
+    .dependencies = .{
+        .network = .{
+            .url = "https://github.com/sylvrs/zig-network/archive/d3e68f0d6f9cff549bdf469cca0aec841995fbb3.tar.gz",
+            .hash = "12206aac6dbd2a6275e2f9415575f1aac6fbbb6d456518e5165aa31045848ea281f6",
+        },
+    },
+}
