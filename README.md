@@ -2,6 +2,31 @@
 
 A simple RakNet server implementation in the [Zig](https://ziglang.org) programming language.
 
+## Note
+
+At the moment, this library only supports the master branch of Zig, meaning that it is prone to breaking changes.
+
+## Installation
+
+The library can be installed using Zig's in-progress package manager:
+
+```js
+// build.zig.zon
+.{
+    .name = "your-project-name",
+    .version = "your-project-version",
+    .dependencies = .{
+        .raknet = .{
+            .url = "https://github.com/sylvrs/zig-raknet/archive/refs/heads/master.tar.gz",
+            // this hash value can be fetched from the error message when trying to build the project
+            // there is no current way to get the hash value automatically as the package manager is
+            // still very much so an *in-progress* project.
+            .hash = "HASHED_VALUE_HERE",
+        },
+    },
+}
+```
+
 ## Usage
 
 Example usage of the library can be found in the `examples` directory. Here is what a simple server looks like:
