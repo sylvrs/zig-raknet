@@ -56,6 +56,10 @@ pub fn build(b: *std.Build) void {
 Example usage of the library can be found in the `examples` directory. Here is what a simple server looks like:
 
 ```js
+const raknet = @import("raknet");
+const network = @import("network");
+const std = @import("std");
+
 pub fn main() !void {
     // create a server
     var server = try raknet.Server.init(
