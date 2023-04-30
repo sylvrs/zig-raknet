@@ -18,11 +18,11 @@ pub const ServerNameFormat = struct {
     port_ipv4: u32,
     port_ipv6: u32,
 
-    pub fn toString(self: ServerNameFormat, allocator: std.mem.Allocator) ![]const u8 {
-        return try std.fmt.allocPrint(allocator, "{s};{s};{d};{s};{d};{d};{d};{s};{s};{d};{d};{d};", .{
+    pub fn toString(self: ServerNameFormat, buf: []u8) ![]const u8 {
+        return try std.fmt.bufPrint(buf, "{s};{s};{d};{s};{d};{d};{d};{s};{s};{d};{d};{d};", .{
             switch (self.header) {
-                ServerHeaderType.MCPE => "MCPE",
-                ServerHeaderType.MCEE => "MCEE",
+                .MCPE => "MCPE",
+                .MCEE => "MCEE",
             },
             self.motd,
             self.protocol_version,
@@ -40,8 +40,8 @@ pub const ServerNameFormat = struct {
 };
 
 pub fn main() !void {
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
     var prng = std.rand.DefaultPrng.init(blk: {
         var seed: u64 = undefined;
         try std.os.getrandom(std.mem.asBytes(&seed));
@@ -50,11 +50,12 @@ pub fn main() !void {
     const rand = prng.random();
     // create a server
     var guid = rand.int(i64);
-    const server_name = ServerNameFormat{
+    // server name format
+    const server_format = ServerNameFormat{
         .header = .MCPE,
         .motd = "Hello from Zig!",
         .protocol_version = 575,
-        .game_version = "1.19.73",
+        .game_version = "1.19.81",
         .player_count = 0,
         .max_player_count = 20,
         .server_guid = guid,
@@ -64,16 +65,19 @@ pub fn main() !void {
         .port_ipv4 = 19132,
         .port_ipv6 = 19132,
     };
+    // create buffer to store server name in
+    var server_name_buf: [1024]u8 = undefined;
+    // format server name using buffer
+    var server_name = try server_format.toString(&server_name_buf);
     var server = try raknet.Server.init(
-        arena.allocator(),
-        try server_name.toString(arena.allocator()),
+        gpa.allocator(),
+        server_name,
         guid,
         .{
             .address = .{ .ipv4 = try network.Address.IPv4.parse("0.0.0.0") },
             .port = 19132,
         },
     );
-    defer server.deinit();
-    std.debug.print("Listening to data on {any}\n", .{server.address});
+    std.debug.print("Listening on {any}\n", .{server.address});
     try server.start();
 }
