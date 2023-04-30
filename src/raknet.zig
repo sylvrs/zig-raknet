@@ -1,7 +1,5 @@
 const std = @import("std");
 const network = @import("network");
-const ReadableBuffer = @import("buffer.zig").ReadableBuffer;
-const WriteableBuffer = @import("buffer.zig").WriteableBuffer;
 const message = @import("message.zig");
 
 /// The magic bytes used to identify an offline message in RakNet
@@ -16,20 +14,15 @@ pub const Server = struct {
     guid: i64,
     address: network.EndPoint,
     socket: network.Socket = undefined,
-    arena: std.heap.ArenaAllocator,
+    allocator: std.mem.Allocator,
 
     pub fn init(allocator: std.mem.Allocator, name: []const u8, guid: i64, address: network.EndPoint) !Server {
         return .{
             .name = name,
             .guid = guid,
             .address = address,
-            .arena = std.heap.ArenaAllocator.init(allocator),
+            .allocator = allocator,
         };
-    }
-
-    /// Deinitialize the arena used by the server
-    pub fn deinit(self: *Server) void {
-        self.arena.deinit();
     }
 
     /// Start server and listen for incoming connections
@@ -51,7 +44,7 @@ pub const Server = struct {
         while (true) {
             const details = try self.socket.receiveFrom(raw[0..]);
             // attempt to decode the message (or skip it if it's invalid)
-            const decoded = decodeMessage(details.sender, raw[0..details.numberOfBytes]) catch |err| {
+            const decoded = decodeMessage(raw[0..details.numberOfBytes]) catch |err| {
                 std.debug.print("[{s}] Error while decoding packet from {s}: {any}\n", .{ LoggedPrefix, details.sender, err });
                 continue;
             };
@@ -59,26 +52,23 @@ pub const Server = struct {
             // just do a simple print for now
             switch (decoded) {
                 .UnconnectedPing => {
-                    std.debug.print("[{s}] Received UnconnectedPing from {s}: {any} \n", .{ LoggedPrefix, details.sender, decoded });
                     const response = message.OfflineMessage.createUnconnectedPong(decoded.UnconnectedPing.ping_time, self.guid, self.name);
                     var write_buffer = [_]u8{0} ** MAX_MESSAGE_SIZE;
-                    var buffer = WriteableBuffer.init(write_buffer[0..]);
-                    const writer = buffer.writer();
+                    var stream = std.io.fixedBufferStream(&write_buffer);
+                    var writer = stream.writer();
                     try response.encode(writer);
-                    _ = try self.socket.sendTo(details.sender, write_buffer[0..buffer.index]);
+                    _ = try self.socket.sendTo(details.sender, stream.getWritten());
                 },
-                else => {},
+                else => std.debug.print("[{s}] Received unknown packet from {s} of size {d} bytes\n", .{ LoggedPrefix, details.sender, raw.len }),
             }
         }
     }
 
     /// Decodes a raw packet into a message
-    fn decodeMessage(sender: network.EndPoint, raw: []const u8) !message.OfflineMessage {
-        std.debug.print("[{s}] Received packet from {s} of size {d} bytes\n", .{ LoggedPrefix, sender, raw.len });
-
+    fn decodeMessage(raw: []const u8) !message.OfflineMessage {
         // initialize buffer & reader
-        var buffer = ReadableBuffer.init(raw);
-        const reader = buffer.reader();
+        var stream = std.io.fixedBufferStream(raw);
+        const reader = stream.reader();
 
         // read pid & attempt to decode
         const pid = try reader.readByte();
