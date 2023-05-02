@@ -66,7 +66,7 @@ pub const OfflineMessage = union(OfflineMessageIds) {
         return switch (try std.meta.intToEnum(OfflineMessageIds, pid)) {
             .UnconnectedPing => {
                 const ping_time = try reader.readIntBig(i64);
-                try helpers.verify_magic(reader);
+                try helpers.verifyMagic(reader);
                 const client_guid = try reader.readIntBig(i64);
                 return .{
                     .UnconnectedPing = .{
@@ -76,7 +76,7 @@ pub const OfflineMessage = union(OfflineMessageIds) {
                 };
             },
             .OpenConnectionRequest1 => {
-                try helpers.verify_magic(reader);
+                try helpers.verifyMagic(reader);
                 const protocol_version = try reader.readByte();
                 var mtu_padding = [_]u8{0} ** raknet.MaxMTUSize;
                 const mtu_size = try reader.readAll(&mtu_padding);
@@ -89,8 +89,8 @@ pub const OfflineMessage = union(OfflineMessageIds) {
                 };
             },
             .OpenConnectionRequest2 => {
-                try helpers.verify_magic(reader);
-                const server_address = try helpers.read_address(reader);
+                try helpers.verifyMagic(reader);
+                const server_address = try helpers.readAddress(reader);
                 const mtu_size = try reader.readIntBig(i16);
                 const client_guid = try reader.readIntBig(i64);
                 return .{
@@ -113,8 +113,7 @@ pub const OfflineMessage = union(OfflineMessageIds) {
                 try writer.writeIntBig(i64, self.UnconnectedPong.pong_time);
                 try writer.writeIntBig(i64, self.UnconnectedPong.server_guid);
                 try writer.writeAll(&RakNetMagic);
-                try writer.writeIntBig(u16, @intCast(u16, self.UnconnectedPong.server_name.len));
-                try writer.writeAll(self.UnconnectedPong.server_name);
+                try helpers.writeString(writer, self.UnconnectedPong.server_name);
             },
             .OpenConnectionReply1 => {
                 try writer.writeByte(@enumToInt(self));
@@ -127,7 +126,7 @@ pub const OfflineMessage = union(OfflineMessageIds) {
                 try writer.writeByte(@enumToInt(self));
                 try writer.writeAll(&RakNetMagic);
                 try writer.writeIntBig(i64, self.OpenConnectionReply2.server_guid);
-                try helpers.write_address(writer, self.OpenConnectionReply2.client_address);
+                try helpers.writeAddress(writer, self.OpenConnectionReply2.client_address);
                 try writer.writeIntBig(i16, self.OpenConnectionReply2.mtu_size);
                 try writer.writeByte(@boolToInt(self.OpenConnectionReply2.encryption_enabled));
             },
