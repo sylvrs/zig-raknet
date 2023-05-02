@@ -1,2 +1,8 @@
 const std = @import("std");
-const network = @import("network");
+
+test {
+    _ = @import("helpers.zig");
+    _ = @import("message.zig");
+    _ = @import("raknet.zig");
+    std.testing.refAllDecls(@This());
+}
