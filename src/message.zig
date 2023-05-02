@@ -65,7 +65,7 @@ pub const OfflineMessage = union(OfflineMessageIds) {
         return switch (try std.meta.intToEnum(OfflineMessageIds, pid)) {
             .UnconnectedPing => {
                 const ping_time = try reader.readIntBig(i64);
-                try helpers.verify_magic(reader);
+                try helpers.verifyMagic(reader);
                 const client_guid = try reader.readIntBig(i64);
                 return .{
                     .UnconnectedPing = .{
@@ -75,7 +75,7 @@ pub const OfflineMessage = union(OfflineMessageIds) {
                 };
             },
             .OpenConnectionRequest1 => {
-                try helpers.verify_magic(reader);
+                try helpers.verifyMagic(reader);
                 const protocol_version = try reader.readByte();
                 var mtu_padding = [_]u8{0} ** raknet.MaxMTUSize;
                 const mtu_size = try reader.readAll(&mtu_padding);
@@ -88,7 +88,7 @@ pub const OfflineMessage = union(OfflineMessageIds) {
                 };
             },
             .OpenConnectionRequest2 => {
-                try helpers.verify_magic(reader);
+                try helpers.verifyMagic(reader);
                 const server_address = try helpers.readAddress(reader);
                 const mtu_size = try reader.readIntBig(i16);
                 const client_guid = try reader.readIntBig(i64);
