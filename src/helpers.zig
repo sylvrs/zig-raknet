@@ -3,6 +3,7 @@ const network = @import("network");
 const RakNetError = @import("raknet.zig").RakNetError;
 const RakNetMagic = @import("raknet.zig").RakNetMagic;
 
+/// Writes a string to the writer.
 pub fn writeString(writer: anytype, value: []const u8) !void {
     try writer.writeIntBig(u16, @intCast(u16, value.len));
     try writer.writeAll(value);
@@ -72,6 +73,7 @@ pub fn readAddress(reader: anytype) !network.EndPoint {
     };
 }
 
+/// Writes a network endpoint (ip + port) to the writer.
 pub fn writeAddress(writer: anytype, endpoint: network.EndPoint) !void {
     return switch (endpoint.address) {
         .ipv4 => {
