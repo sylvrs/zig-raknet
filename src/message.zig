@@ -1,8 +1,9 @@
 const std = @import("std");
+const network = @import("network");
 const raknet = @import("raknet.zig");
 const RakNetMagic = raknet.RakNetMagic;
 const helpers = @import("helpers.zig");
-const network = @import("network");
+const frame = @import("frame.zig");
 
 pub const OfflineMessageIds = enum(u8) {
     UnconnectedPing = 0x01,
@@ -156,7 +157,7 @@ pub const OnlineMessageIds = enum(u8) {
     DisconnectionNotification = 0x15,
     Ack = 0xc0,
     Nack = 0xa0,
-    UserPacket = 0x86,
+    Datagram = 0x80,
 };
 
 pub const OnlineMessage = union(OnlineMessageIds) {
@@ -168,18 +169,96 @@ pub const OnlineMessage = union(OnlineMessageIds) {
     DisconnectionNotification: struct {},
     Ack: struct {},
     Nack: struct {},
-    UserPacket: struct {},
+    Datagram: struct { flags: u8, sequence_number: u24, frames: []frame.Frame },
 
     /// Attempts to construct an OfflineMessage from a packet ID & reader.
-    pub fn from(reader: anytype) !OnlineMessage {
+    pub fn from(allocator: std.mem.Allocator, raw: []const u8) !OnlineMessage {
+        var stream = std.io.fixedBufferStream(raw);
+        const reader = stream.reader();
         const pid = try reader.readByte();
         return switch (pid) {
             @enumToInt(OnlineMessageIds.Ack) => .{ .Ack = .{} },
             @enumToInt(OnlineMessageIds.Nack) => .{ .Nack = .{} },
-            else => error.UnsupportedOnlineMessageId,
+            else => {
+                // received a non-datagram message while connected
+                if (pid & 0x80 == 0) {
+                    return error.InvalidOnlineMessageId;
+                }
+                // reset to the beginning of the packet
+                stream.reset();
+
+                const flags = try reader.readByte();
+                const sequence_number = try reader.readIntLittle(u24);
+                // we do not need to call deinit here because `toOwnedSlice` handles it for us
+                var frames = std.ArrayList(frame.Frame).init(allocator);
+                while (try stream.getPos() < try stream.getEndPos()) {
+                    try frames.append(try frame.Frame.from(reader, allocator));
+                }
+                // todo: deallocate frames after use
+                return .{ .Datagram = .{ .flags = flags, .sequence_number = sequence_number, .frames = try frames.toOwnedSlice() } };
+            },
         };
     }
 
     /// Custom parser for OnlineMessage
-    pub fn format(_: @This(), comptime _: []const u8, _: std.fmt.FormatOptions, _: anytype) !void {}
+    pub fn format(value: @This(), comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
+        switch (value) {
+            .ConnectedPing => try writer.print("ConnectedPing {{ ping_time: {} }}", .{value.ConnectedPing.ping_time}),
+            .ConnectedPong => try writer.print("ConnectedPong {{ ping_time: {}, pong_time: {} }}", .{ value.ConnectedPong.ping_time, value.ConnectedPong.pong_time }),
+            .ConnectionRequest => try writer.print("ConnectionRequest {{ client_guid: {}, time: {} }}", .{ value.ConnectionRequest.client_guid, value.ConnectionRequest.time }),
+            .ConnectionRequestAccepted => try writer.print("ConnectionRequestAccepted {{ client_address: {}, system_index: {}, internal_ids: {any}, request_time: {}, time: {} }}", .{ value.ConnectionRequestAccepted.client_address, value.ConnectionRequestAccepted.system_index, value.ConnectionRequestAccepted.internal_ids, value.ConnectionRequestAccepted.request_time, value.ConnectionRequestAccepted.time }),
+            .NewIncomingConnection => try writer.print("NewIncomingConnection {{ address: {any}, internal_address: {any} }}", .{ value.NewIncomingConnection.address, value.NewIncomingConnection.internal_address }),
+            .DisconnectionNotification => try writer.print("DisconnectionNotification {{ }}", .{}),
+            .Ack => try writer.print("Ack {{ }}", .{}),
+            .Nack => try writer.print("Nack {{ }}", .{}),
+            .Datagram => try writer.print("Datagram {{ flags: {}, sequence_number: {}, frame_count: {} }}", .{ value.Datagram.flags, value.Datagram.sequence_number, value.Datagram.frames.len }),
+        }
+    }
+};
+
+pub const MessageBuilder = struct {
+    count: u32,
+    allocator: std.mem.Allocator,
+    pending_frames: std.AutoHashMap(u32, []const u8),
+
+    pub fn init(count: u32, allocator: std.mem.Allocator) !MessageBuilder {
+        return .{
+            .count = count,
+            .allocator = allocator,
+            .pending_frames = std.AutoHashMap(u32, []const u8).init(allocator),
+        };
+    }
+
+    pub fn add(self: *MessageBuilder, current_frame: frame.Frame) !void {
+        self.pending_frames.put(current_frame.sequence_number, current_frame.buffer());
+    }
+
+    pub fn complete(self: *MessageBuilder) bool {
+        return self.pending_frames.count() == self.count;
+    }
+
+    pub fn build(self: *MessageBuilder) ![]const u8 {
+        if (!self.complete()) {
+            return error.IncompleteMessage;
+        }
+        var buffer_size = 0;
+        for (self.pending_frames.keys()) |key| {
+            buffer_size += self.pending_frames.get(key).?.len;
+        }
+        var buffer = try self.allocator.alloc(u8, buffer_size);
+        var stream = std.io.fixedBufferStream(buffer);
+        const writer = stream.writer();
+        for (self.pending_frames.keys()) |key| {
+            try writer.writeAll(self.pending_frames.get(key).?);
+        }
+        // free the pending frames & their underlying buffers
+        defer {
+            for (self.pending_frames.keys()) |key| {
+                self.allocator.free(self.pending_frames.get(key).?);
+                self.pending_frames.remove(key);
+            }
+            self.pending_frames.deinit();
+        }
+        return try stream.toOwnedSlice();
+    }
 };

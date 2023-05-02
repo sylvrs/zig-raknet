@@ -75,13 +75,13 @@ pub const Server = struct {
 
     /// The main loop for receiving and processing packets
     pub fn receive(self: *Server) !void {
-        var raw = [_]u8{0} ** MAX_MESSAGE_SIZE;
+        var raw = [_]u8{0} ** MaxMTUSize;
         const details = try self.socket.receiveFrom(raw[0..]);
 
         var associated_connection = self.connections.get(details.sender);
         // if we don't have a connection, attempt to handle it as an offline message
         if (associated_connection) |*found_connection| {
-            const msg = decodeOnlineMessage(raw[0..details.numberOfBytes]) catch |err| {
+            const msg = self.decodeOnlineMessage(raw[0..details.numberOfBytes]) catch |err| {
                 self.logInfo("Error while decoding online message (0x{x:0>2}) from {s}: {any}", .{ raw[0], details.sender, err });
                 return;
             };
@@ -108,11 +108,8 @@ pub const Server = struct {
     }
 
     /// Decodes a raw packet into a message
-    fn decodeOnlineMessage(raw: []const u8) !message.OnlineMessage {
-        // initialize buffer & reader
-        var stream = std.io.fixedBufferStream(raw);
-        const reader = stream.reader();
-        return try message.OnlineMessage.from(reader);
+    fn decodeOnlineMessage(self: *Server, raw: []const u8) !message.OnlineMessage {
+        return try message.OnlineMessage.from(self.allocator, raw);
     }
 
     fn handleOfflineMessage(self: *Server, sender: network.EndPoint, received_message: message.OfflineMessage) !void {
