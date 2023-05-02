@@ -89,7 +89,7 @@ pub const OfflineMessage = union(OfflineMessageIds) {
             },
             .OpenConnectionRequest2 => {
                 try helpers.verify_magic(reader);
-                const server_address = try helpers.read_address(reader);
+                const server_address = try helpers.readAddress(reader);
                 const mtu_size = try reader.readIntBig(i16);
                 const client_guid = try reader.readIntBig(i64);
                 return .{
@@ -126,7 +126,7 @@ pub const OfflineMessage = union(OfflineMessageIds) {
                 try writer.writeByte(@enumToInt(self));
                 try writer.writeAll(&RakNetMagic);
                 try writer.writeIntBig(i64, self.OpenConnectionReply2.server_guid);
-                try helpers.write_address(writer, self.OpenConnectionReply2.client_address);
+                try helpers.writeAddress(writer, self.OpenConnectionReply2.client_address);
                 try writer.writeIntBig(i16, self.OpenConnectionReply2.mtu_size);
                 try writer.writeByte(@boolToInt(self.OpenConnectionReply2.encryption_enabled));
             },
