@@ -112,8 +112,7 @@ pub const OfflineMessage = union(OfflineMessageIds) {
                 try writer.writeIntBig(i64, self.UnconnectedPong.pong_time);
                 try writer.writeIntBig(i64, self.UnconnectedPong.server_guid);
                 try writer.writeAll(&RakNetMagic);
-                try writer.writeIntBig(u16, @intCast(u16, self.UnconnectedPong.server_name.len));
-                try writer.writeAll(self.UnconnectedPong.server_name);
+                try helpers.writeString(writer, self.UnconnectedPong.server_name);
             },
             .OpenConnectionReply1 => {
                 try writer.writeByte(@enumToInt(self));
