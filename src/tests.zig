@@ -1,8 +1,8 @@
 const std = @import("std");
+pub const helpers = @import("helpers.zig");
+pub const message = @import("message.zig");
+pub const raknet = @import("raknet.zig");
 
 test {
-    _ = @import("helpers.zig");
-    _ = @import("message.zig");
-    _ = @import("raknet.zig");
-    std.testing.refAllDecls(@This());
+    std.testing.refAllDeclsRecursive(@This());
 }
