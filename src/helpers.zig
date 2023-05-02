@@ -3,6 +3,33 @@ const network = @import("network");
 const RakNetError = @import("raknet.zig").RakNetError;
 const RakNetMagic = @import("raknet.zig").RakNetMagic;
 
+pub fn writeString(writer: anytype, value: []const u8) !void {
+    try writer.writeIntBig(u16, @intCast(u16, value.len));
+    try writer.writeAll(value);
+}
+
+/// Reads a string from the reader into the buffer.
+pub fn readStringBuffer(reader: anytype, buffer: []u8) ![]const u8 {
+    const length = try reader.readIntBig(u16);
+    const read_bytes = try reader.readAtLeast(buffer, length);
+    if (read_bytes != length) {
+        return error.MismatchedStringLength;
+    }
+    return buffer[0..length];
+}
+
+/// Reads a string from the reader into a buffer allocated with the given allocator.
+pub fn readStringAlloc(reader: anytype, allocator: std.mem.Allocator) ![]const u8 {
+    const length = try reader.readIntBig(u16);
+    const buffer = try allocator.alloc(u8, length);
+    const read_bytes = try reader.readAtLeast(buffer, length);
+    if (read_bytes != length) {
+        return error.MismatchedStringLength;
+    }
+    return buffer[0..length];
+}
+
+/// Verifies that the magic bytes read from the current position of the reader match the expected magic bytes.
 pub fn verifyMagic(reader: anytype) RakNetError!void {
     const received_magic = try reader.readBoundedBytes(RakNetMagic.len);
     if (!std.mem.eql(u8, &RakNetMagic, received_magic.buffer[0..received_magic.len])) {
@@ -10,6 +37,7 @@ pub fn verifyMagic(reader: anytype) RakNetError!void {
     }
 }
 
+/// Reads a network endpoint (ip + port) from the reader.
 pub fn readAddress(reader: anytype) !network.EndPoint {
     const address_family = try reader.readByte();
     return switch (address_family) {
@@ -63,6 +91,49 @@ pub fn writeAddress(writer: anytype, endpoint: network.EndPoint) !void {
             try writer.writeIntBig(u32, endpoint.address.ipv6.scope_id);
         },
     };
+}
+
+test "write string correctly" {
+    const value = "test string";
+    const expected = [_]u8{ 0x00, 0x0b, 0x74, 0x65, 0x73, 0x74, 0x20, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67 };
+    // allocate a small buffer
+    const allocator: std.mem.Allocator = std.testing.allocator;
+    var write_buffer = try allocator.alloc(u8, 1024);
+    defer allocator.free(write_buffer);
+    // create stream & writer
+    var stream = std.io.fixedBufferStream(write_buffer);
+    const writer = stream.writer();
+    // write string
+    try writeString(writer, value);
+    // check that the written bytes are correct
+    try std.testing.expectEqualSlices(u8, &expected, stream.getWritten());
+}
+
+test "read string using buffer correctly" {
+    const expected = "test string";
+    // create stream & reader
+    const read_buffer = [_]u8{ 0x00, 0x0b, 0x74, 0x65, 0x73, 0x74, 0x20, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67 };
+    var stream = std.io.fixedBufferStream(&read_buffer);
+    const reader = stream.reader();
+    // read string into buffer
+    var buffer = [_]u8{0} ** 1024;
+    const value = try readStringBuffer(reader, &buffer);
+    // check that the read string is correct
+    try std.testing.expectEqualStrings(expected, value);
+}
+
+test "read string using allocator correctly" {
+    const expected = "test string";
+    // create stream & reader
+    const read_buffer = [_]u8{ 0x00, 0x0b, 0x74, 0x65, 0x73, 0x74, 0x20, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67 };
+    var stream = std.io.fixedBufferStream(&read_buffer);
+    const reader = stream.reader();
+    // read string into buffer
+    var allocator = std.testing.allocator;
+    const value = try readStringAlloc(reader, allocator);
+    defer allocator.free(value);
+    // check that the read string is correct
+    try std.testing.expectEqualStrings(expected, value);
 }
 
 test "correctly verify magic" {
