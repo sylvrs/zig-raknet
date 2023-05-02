@@ -65,6 +65,20 @@ pub fn writeAddress(writer: anytype, endpoint: network.EndPoint) !void {
     };
 }
 
+test "correctly verify magic" {
+    const read_buffer = [_]u8{ 0x00, 0xff, 0xff, 0x00, 0xfe, 0xfe, 0xfe, 0xfe, 0xfd, 0xfd, 0xfd, 0xfd, 0x12, 0x34, 0x56, 0x78 };
+    var stream = std.io.fixedBufferStream(&read_buffer);
+    const reader = stream.reader();
+    try verifyMagic(reader);
+}
+
+test "correctly fail to verify magic" {
+    const read_buffer = [_]u8{ 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff };
+    var stream = std.io.fixedBufferStream(&read_buffer);
+    const reader = stream.reader();
+    try std.testing.expectError(RakNetError.InvalidMagic, verifyMagic(reader));
+}
+
 test "correctly read IPv4 address" {
     const expected = network.EndPoint{ .address = .{ .ipv4 = network.Address.IPv4.init(127, 0, 0, 1) }, .port = 12345 };
     // create stream & reader
