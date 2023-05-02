@@ -12,7 +12,6 @@ pub const MaxMTUSize = 1500;
 
 pub const Server = struct {
     const MAX_MESSAGE_SIZE: usize = 65535;
-    const ServerError = error{InvalidMagic};
     name: []const u8,
     guid: i64,
     address: network.EndPoint,
