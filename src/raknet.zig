@@ -7,6 +7,8 @@ const connection = @import("connection.zig");
 pub const RakNetMagic: [16]u8 = [_]u8{ 0x00, 0xff, 0xff, 0x00, 0xfe, 0xfe, 0xfe, 0xfe, 0xfd, 0xfd, 0xfd, 0xfd, 0x12, 0x34, 0x56, 0x78 };
 /// The types of errors that can occur while processing a RakNet message
 pub const RakNetError = error{InvalidMagic};
+/// The current version of the RakNet protocol
+pub const RakNetProtocolVersion = 11;
 /// The maximum size of a packet that can be sent at a time
 pub const MaxMTUSize = 1500;
 
@@ -81,44 +83,29 @@ pub const Server = struct {
         var associated_connection = self.connections.get(details.sender);
         // if we don't have a connection, attempt to handle it as an offline message
         if (associated_connection) |*found_connection| {
-            const msg = self.decodeOnlineMessage(raw[0..details.numberOfBytes]) catch |err| {
+            const msg = message.ConnectedMessage.from(self.allocator, raw[0..details.numberOfBytes]) catch |err| {
                 self.logInfo("Error while decoding online message (0x{x:0>2}) from {s}: {any}", .{ raw[0], details.sender, err });
                 return;
             };
             try found_connection.handleMessage(msg);
         } else {
             // attempt to decode the message (or skip it if it's invalid)
-            const msg = decodeOfflineMessage(raw[0..details.numberOfBytes]) catch |err| {
+            const msg = message.UnconnectedMessage.from(raw[0..details.numberOfBytes]) catch |err| {
                 self.logInfo("Error while decoding offline message (0x{x:0>2}) from {s}: {any}", .{ raw[0], details.sender, err });
                 return;
             };
-            try self.handleOfflineMessage(details.sender, msg);
+            try self.handleUnconnectedMessage(details.sender, msg);
         }
     }
 
-    /// Decodes a raw packet into a message
-    fn decodeOfflineMessage(raw: []const u8) !message.OfflineMessage {
-        // initialize buffer & reader
-        var stream = std.io.fixedBufferStream(raw);
-        const reader = stream.reader();
-
-        // read pid & attempt to decode
-        const pid = try reader.readByte();
-        return try message.OfflineMessage.from(pid, reader);
-    }
-
-    /// Decodes a raw packet into a message
-    fn decodeOnlineMessage(self: *Server, raw: []const u8) !message.OnlineMessage {
-        return try message.OnlineMessage.from(self.allocator, raw);
-    }
-
-    fn handleOfflineMessage(self: *Server, sender: network.EndPoint, received_message: message.OfflineMessage) !void {
+    /// Handles a decoded, unconnected message
+    fn handleUnconnectedMessage(self: *Server, sender: network.EndPoint, received_message: message.UnconnectedMessage) !void {
         switch (received_message) {
             .UnconnectedPing => {
                 // send pong back
-                try self.sendOfflineMessage(
+                try self.sendUnconnectedMessage(
                     sender,
-                    message.OfflineMessage.createUnconnectedPong(
+                    message.UnconnectedMessage.createUnconnectedPong(
                         received_message.UnconnectedPing.ping_time,
                         self.guid,
                         self.name,
@@ -127,9 +114,9 @@ pub const Server = struct {
             },
             .OpenConnectionRequest1 => {
                 self.logInfo("Received OpenConnectionRequest1 from {s}: {any}", .{ sender, received_message });
-                try self.sendOfflineMessage(
+                try self.sendUnconnectedMessage(
                     sender,
-                    message.OfflineMessage.createOpenConnectionReply1(
+                    message.UnconnectedMessage.createOpenConnectionReply1(
                         self.guid,
                         false,
                         @intCast(i16, received_message.OpenConnectionRequest1.mtu_padding.len),
@@ -138,9 +125,9 @@ pub const Server = struct {
             },
             .OpenConnectionRequest2 => {
                 self.logInfo("Received OpenConnectionRequest2 from {s}: {any}", .{ sender, received_message });
-                try self.sendOfflineMessage(
+                try self.sendUnconnectedMessage(
                     sender,
-                    message.OfflineMessage.createOpenConnectionReply2(
+                    message.UnconnectedMessage.createOpenConnectionReply2(
                         self.guid,
                         sender,
                         received_message.OpenConnectionRequest2.mtu_size,
@@ -161,7 +148,7 @@ pub const Server = struct {
         }
     }
 
-    pub fn sendOfflineMessage(self: *Server, receiver: network.EndPoint, msg: message.OfflineMessage) !void {
+    pub fn sendUnconnectedMessage(self: *Server, receiver: network.EndPoint, msg: message.UnconnectedMessage) !void {
         var write_buffer = [_]u8{0} ** MAX_MESSAGE_SIZE;
         var stream = std.io.fixedBufferStream(&write_buffer);
         var writer = stream.writer();

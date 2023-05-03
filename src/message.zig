@@ -5,7 +5,7 @@ const RakNetMagic = raknet.RakNetMagic;
 const helpers = @import("helpers.zig");
 const frame = @import("frame.zig");
 
-pub const OfflineMessageIds = enum(u8) {
+pub const UnconnectedMessageIds = enum(u8) {
     UnconnectedPing = 0x01,
     UnconnectedPong = 0x1c,
     OpenConnectionRequest1 = 0x05,
@@ -15,7 +15,7 @@ pub const OfflineMessageIds = enum(u8) {
     IncompatibleProtocolVersion = 0x19,
 };
 
-pub const OfflineMessage = union(OfflineMessageIds) {
+pub const UnconnectedMessage = union(UnconnectedMessageIds) {
     UnconnectedPing: struct { ping_time: i64, client_guid: i64 },
     UnconnectedPong: struct { pong_time: i64, server_guid: i64, magic: @TypeOf(RakNetMagic), server_name: []const u8 },
     OpenConnectionRequest1: struct { magic: @TypeOf(RakNetMagic), protocol_version: u8, mtu_padding: []const u8 },
@@ -25,7 +25,7 @@ pub const OfflineMessage = union(OfflineMessageIds) {
     IncompatibleProtocolVersion: struct { protocol: u8, magic: @TypeOf(RakNetMagic), server_guid: i64 },
 
     /// Creates an UnconnectedPong struct given the current time, server GUID, and server name.
-    pub fn createUnconnectedPong(pong_time: i64, server_guid: i64, server_name: []const u8) OfflineMessage {
+    pub fn createUnconnectedPong(pong_time: i64, server_guid: i64, server_name: []const u8) UnconnectedMessage {
         return .{
             .UnconnectedPong = .{
                 .pong_time = pong_time,
@@ -37,7 +37,7 @@ pub const OfflineMessage = union(OfflineMessageIds) {
     }
 
     /// Creates an OpenConnectionReply1 struct given the server GUID, whether or not to use security, and the MTU size.
-    pub fn createOpenConnectionReply1(server_guid: i64, use_security: bool, mtu_size: i16) OfflineMessage {
+    pub fn createOpenConnectionReply1(server_guid: i64, use_security: bool, mtu_size: i16) UnconnectedMessage {
         return .{
             .OpenConnectionReply1 = .{
                 .magic = RakNetMagic,
@@ -49,7 +49,7 @@ pub const OfflineMessage = union(OfflineMessageIds) {
     }
 
     /// Creates an OpenConnectionReply2 struct given the server GUID, client address, MTU size, and whether or not to use encryption.
-    pub fn createOpenConnectionReply2(server_guid: i64, client_address: network.EndPoint, mtu_size: i16, encryption_enabled: bool) OfflineMessage {
+    pub fn createOpenConnectionReply2(server_guid: i64, client_address: network.EndPoint, mtu_size: i16, encryption_enabled: bool) UnconnectedMessage {
         return .{
             .OpenConnectionReply2 = .{
                 .magic = RakNetMagic,
@@ -62,8 +62,14 @@ pub const OfflineMessage = union(OfflineMessageIds) {
     }
 
     /// Attempts to construct an OfflineMessage from a packet ID & reader.
-    pub fn from(pid: u8, reader: anytype) !OfflineMessage {
-        return switch (try std.meta.intToEnum(OfflineMessageIds, pid)) {
+    pub fn from(raw: []const u8) !UnconnectedMessage {
+        // initialize buffer & reader
+        var stream = std.io.fixedBufferStream(raw);
+        const reader = stream.reader();
+
+        // read pid & attempt to decode
+        const pid = try reader.readByte();
+        return switch (try std.meta.intToEnum(UnconnectedMessageIds, pid)) {
             .UnconnectedPing => {
                 const ping_time = try reader.readIntBig(i64);
                 try helpers.verifyMagic(reader);
@@ -106,7 +112,7 @@ pub const OfflineMessage = union(OfflineMessageIds) {
         };
     }
 
-    pub fn encode(self: OfflineMessage, writer: anytype) !void {
+    pub fn encode(self: UnconnectedMessage, writer: anytype) !void {
         return switch (self) {
             .UnconnectedPong => {
                 try writer.writeByte(@enumToInt(self));
@@ -148,40 +154,33 @@ pub const OfflineMessage = union(OfflineMessageIds) {
     }
 };
 
-pub const OnlineMessageIds = enum(u8) {
-    ConnectedPing = 0x00,
-    ConnectedPong = 0x03,
-    ConnectionRequest = 0x09,
-    ConnectionRequestAccepted = 0x10,
-    NewIncomingConnection = 0x13,
-    DisconnectionNotification = 0x15,
-    Ack = 0xc0,
-    Nack = 0xa0,
-    Datagram = 0x80,
-};
-
-pub const OnlineMessage = union(OnlineMessageIds) {
-    ConnectedPing: struct { ping_time: i64 },
-    ConnectedPong: struct { ping_time: i64, pong_time: i64 },
-    ConnectionRequest: struct { client_guid: i64, time: i64 },
-    ConnectionRequestAccepted: struct { client_address: network.EndPoint, system_index: i16, internal_ids: []network.EndPoint, request_time: i64, time: i64 },
-    NewIncomingConnection: struct { address: network.EndPoint, internal_address: network.EndPoint },
-    DisconnectionNotification: struct {},
+/// Connected messages are the outermost packet layer of connections.
+pub const ConnectedMessageIds = enum(u8) { Ack = 0xc0, Nack = 0xa0, Datagram = 0x80 };
+pub const ConnectedMessage = union(ConnectedMessageIds) {
     Ack: struct {},
     Nack: struct {},
     Datagram: struct { flags: u8, sequence_number: u24, frames: []frame.Frame },
 
-    /// Attempts to construct an OfflineMessage from a packet ID & reader.
-    pub fn from(allocator: std.mem.Allocator, raw: []const u8) !OnlineMessage {
+    /// Custom parser for ConnectedMessage
+    pub fn format(value: @This(), comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
+        switch (value) {
+            .Ack => try writer.print("Ack {{ }}", .{}),
+            .Nack => try writer.print("Nack {{ }}", .{}),
+            .Datagram => try writer.print("Datagram {{ flags: {}, sequence_number: {}, frame_count: {} }}", .{ value.Datagram.flags, value.Datagram.sequence_number, value.Datagram.frames.len }),
+        }
+    }
+
+    /// Attempts to construct an ConnectedMessage from a packet ID & reader.
+    pub fn from(allocator: std.mem.Allocator, raw: []const u8) !ConnectedMessage {
         var stream = std.io.fixedBufferStream(raw);
         const reader = stream.reader();
         const pid = try reader.readByte();
         return switch (pid) {
-            @enumToInt(OnlineMessageIds.Ack) => .{ .Ack = .{} },
-            @enumToInt(OnlineMessageIds.Nack) => .{ .Nack = .{} },
+            @enumToInt(ConnectedMessageIds.Ack) => .{ .Ack = .{} },
+            @enumToInt(ConnectedMessageIds.Nack) => .{ .Nack = .{} },
             else => {
                 // received a non-datagram message while connected
-                if (pid & 0x80 == 0) {
+                if (pid & @enumToInt(ConnectedMessageIds.Datagram) == 0) {
                     return error.InvalidOnlineMessageId;
                 }
                 // reset to the beginning of the packet
@@ -197,6 +196,43 @@ pub const OnlineMessage = union(OnlineMessageIds) {
                 // todo: deallocate frames after use
                 return .{ .Datagram = .{ .flags = flags, .sequence_number = sequence_number, .frames = try frames.toOwnedSlice() } };
             },
+        };
+    }
+};
+
+/// Datagram messages are the inner layer of the Datagram.
+pub const DatagramMessageIds = enum(u8) {
+    ConnectedPing = 0x00,
+    ConnectedPong = 0x03,
+    ConnectionRequest = 0x09,
+    ConnectionRequestAccepted = 0x10,
+    NewIncomingConnection = 0x13,
+    DisconnectionNotification = 0x15,
+    UserMessage = 0x86,
+};
+
+pub const DatagramMessage = union(DatagramMessageIds) {
+    ConnectedPing: struct { ping_time: i64 },
+    ConnectedPong: struct { ping_time: i64, pong_time: i64 },
+    ConnectionRequest: struct { client_guid: i64, time: i64 },
+    ConnectionRequestAccepted: struct { client_address: network.EndPoint, system_index: i16, internal_ids: []network.EndPoint, request_time: i64, time: i64 },
+    NewIncomingConnection: struct { address: network.EndPoint, internal_address: network.EndPoint },
+    DisconnectionNotification: struct {},
+    UserMessage: struct { id: u32, buffer: []const u8 },
+
+    /// Attempts to construct an ConnectedMessage from a packet ID & reader.
+    pub fn from(raw: []const u8) !DatagramMessage {
+        var stream = std.io.fixedBufferStream(raw);
+        const reader = stream.reader();
+        const message_id = try std.meta.intToEnum(DatagramMessageIds, try reader.readByte());
+        return switch (message_id) {
+            .ConnectedPing => @compileError("ConnectedPing is not implemented"),
+            .ConnectedPong => @compileError("ConnectedPong is not implemented"),
+            .ConnectionRequest => @compileError("ConnectionRequest is not implemented"),
+            .ConnectionRequestAccepted => @compileError("ConnectionRequestAccepted is not implemented"),
+            .NewIncomingConnection => @compileError("NewIncomingConnection is not implemented"),
+            .DisconnectionNotification => .{ .DisconnectionNotification = .{} },
+            .UserMessage => @compileError("UserMessage is not implemented"),
         };
     }
 
@@ -230,7 +266,14 @@ pub const MessageBuilder = struct {
     }
 
     pub fn add(self: *MessageBuilder, current_frame: frame.Frame) !void {
-        self.pending_frames.put(current_frame.sequence_number, current_frame.buffer());
+        if (try current_frame.fragment()) |fragment| {
+            try self.pending_frames.put(
+                fragment.fragment_id,
+                try current_frame.body(),
+            );
+        } else {
+            return error.InvalidFragment;
+        }
     }
 
     pub fn complete(self: *MessageBuilder) bool {
@@ -241,24 +284,20 @@ pub const MessageBuilder = struct {
         if (!self.complete()) {
             return error.IncompleteMessage;
         }
-        var buffer_size = 0;
-        for (self.pending_frames.keys()) |key| {
-            buffer_size += self.pending_frames.get(key).?.len;
+        var list = std.ArrayList(u8).init(self.allocator);
+        var iterator = self.pending_frames.valueIterator();
+        while (iterator.next()) |value| {
+            try list.appendSlice(value.*);
         }
-        var buffer = try self.allocator.alloc(u8, buffer_size);
-        var stream = std.io.fixedBufferStream(buffer);
-        const writer = stream.writer();
-        for (self.pending_frames.keys()) |key| {
-            try writer.writeAll(self.pending_frames.get(key).?);
-        }
-        // free the pending frames & their underlying buffers
         defer {
-            for (self.pending_frames.keys()) |key| {
-                self.allocator.free(self.pending_frames.get(key).?);
-                self.pending_frames.remove(key);
+            var destruction_iterator = self.pending_frames.valueIterator();
+            while (destruction_iterator.next()) |value| {
+                self.allocator.free(value.*);
             }
             self.pending_frames.deinit();
         }
-        return try stream.toOwnedSlice();
+        return try list.toOwnedSlice();
     }
 };
+
+test "test message builder allocation" {}
