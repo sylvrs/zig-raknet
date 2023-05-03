@@ -77,21 +77,21 @@ pub const Server = struct {
 
     /// The main loop for receiving and processing packets
     pub fn receive(self: *Server) !void {
-        var raw = [_]u8{0} ** MaxMTUSize;
-        const details = try self.socket.receiveFrom(raw[0..]);
-
+        var buffer = [_]u8{0} ** MaxMTUSize;
+        const details = try self.socket.receiveFrom(buffer[0..]);
+        const raw = buffer[0..details.numberOfBytes];
         var associated_connection = self.connections.get(details.sender);
         // if we don't have a connection, attempt to handle it as an offline message
         if (associated_connection) |*found_connection| {
-            const msg = message.ConnectedMessage.from(self.allocator, raw[0..details.numberOfBytes]) catch |err| {
-                self.logInfo("Error while decoding online message (0x{x:0>2}) from {s}: {any}", .{ raw[0], details.sender, err });
+            const msg = message.DataMessage.from(self.allocator, raw) catch |err| {
+                self.logErr("Error while decoding datagram message (0x{x:0>2}) from {s}: {any}", .{ raw[0], details.sender, err });
                 return;
             };
             try found_connection.handleMessage(msg);
         } else {
             // attempt to decode the message (or skip it if it's invalid)
-            const msg = message.UnconnectedMessage.from(raw[0..details.numberOfBytes]) catch |err| {
-                self.logInfo("Error while decoding offline message (0x{x:0>2}) from {s}: {any}", .{ raw[0], details.sender, err });
+            const msg = message.UnconnectedMessage.from(raw) catch |err| {
+                self.logErr("Error while decoding offline message (0x{x:0>2}) from {s}: {any}", .{ raw[0], details.sender, err });
                 return;
             };
             try self.handleUnconnectedMessage(details.sender, msg);
