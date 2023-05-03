@@ -10,13 +10,13 @@ pub fn writeString(writer: anytype, value: []const u8) !void {
 }
 
 /// Reads a string from the reader into the buffer.
-pub fn readStringBuffer(reader: anytype, buffer: []u8) ![]const u8 {
+pub fn readStringBuffer(reader: anytype, buffer: []u8) !usize {
     const length = try reader.readIntBig(u16);
     const read_bytes = try reader.readAtLeast(buffer, length);
     if (read_bytes != length) {
         return error.MismatchedStringLength;
     }
-    return buffer[0..length];
+    return length;
 }
 
 /// Reads a string from the reader into a buffer allocated with the given allocator.
@@ -119,7 +119,8 @@ test "read string using buffer correctly" {
     const reader = stream.reader();
     // read string into buffer
     var buffer = [_]u8{0} ** 1024;
-    const value = try readStringBuffer(reader, &buffer);
+    const size = try readStringBuffer(reader, &buffer);
+    const value = buffer[0..size];
     // check that the read string is correct
     try std.testing.expectEqualStrings(expected, value);
 }
