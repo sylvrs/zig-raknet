@@ -154,9 +154,11 @@ pub const UnconnectedMessage = union(UnconnectedMessageIds) {
     }
 };
 
-/// Connected messages are the outermost packet layer of connections.
-pub const ConnectedMessageIds = enum(u8) { Ack = 0xc0, Nack = 0xa0, Datagram = 0x80 };
-pub const ConnectedMessage = union(ConnectedMessageIds) {
+/// Data messages are the outermost packet layer of connections.
+/// Each datagram must have the Datagram flag set.
+/// The Ack and Nack flags are mutually exclusive.
+pub const DataMessageFlags = enum(u8) { Datagram = 0x80, Ack = 0x40, Nack = 0x20 };
+pub const DataMessage = union(enum) {
     Ack: struct {},
     Nack: struct {},
     Datagram: struct { flags: u8, sequence_number: u24, frames: []frame.Frame },
@@ -171,21 +173,21 @@ pub const ConnectedMessage = union(ConnectedMessageIds) {
     }
 
     /// Attempts to construct an ConnectedMessage from a packet ID & reader.
-    pub fn from(allocator: std.mem.Allocator, raw: []const u8) !ConnectedMessage {
+    pub fn from(allocator: std.mem.Allocator, raw: []const u8) !DataMessage {
         var stream = std.io.fixedBufferStream(raw);
         const reader = stream.reader();
         const pid = try reader.readByte();
-        return switch (pid) {
-            @enumToInt(ConnectedMessageIds.Ack) => .{ .Ack = .{} },
-            @enumToInt(ConnectedMessageIds.Nack) => .{ .Nack = .{} },
+        // if bitwise-and gives us 0, then it's not a valid Datagram
+        if (pid & @enumToInt(DataMessageFlags.Datagram) == 0) {
+            return error.InvalidOnlineMessageId;
+        }
+
+        return switch (true) {
+            pid & @enumToInt(DataMessageFlags.Ack) != 0 => .{ .Ack = .{} },
+            pid & @enumToInt(DataMessageFlags.Nack) != 0 => .{ .Nack = .{} },
             else => {
-                // received a non-datagram message while connected
-                if (pid & @enumToInt(ConnectedMessageIds.Datagram) == 0) {
-                    return error.InvalidOnlineMessageId;
-                }
                 // reset to the beginning of the packet
                 stream.reset();
-
                 const flags = try reader.readByte();
                 const sequence_number = try reader.readIntLittle(u24);
                 // we do not need to call deinit here because `toOwnedSlice` handles it for us
@@ -200,8 +202,8 @@ pub const ConnectedMessage = union(ConnectedMessageIds) {
     }
 };
 
-/// Datagram messages are the inner layer of the Datagram.
-pub const DatagramMessageIds = enum(u8) {
+/// Connected messages are the inner layer of the Datagram type of the DataMessage.
+pub const ConnectedMessageIds = enum(u8) {
     ConnectedPing = 0x00,
     ConnectedPong = 0x03,
     ConnectionRequest = 0x09,
@@ -211,7 +213,7 @@ pub const DatagramMessageIds = enum(u8) {
     UserMessage = 0x86,
 };
 
-pub const DatagramMessage = union(DatagramMessageIds) {
+pub const ConnectedMessage = union(ConnectedMessageIds) {
     ConnectedPing: struct { ping_time: i64 },
     ConnectedPong: struct { ping_time: i64, pong_time: i64 },
     ConnectionRequest: struct { client_guid: i64, time: i64 },
@@ -221,11 +223,10 @@ pub const DatagramMessage = union(DatagramMessageIds) {
     UserMessage: struct { id: u32, buffer: []const u8 },
 
     /// Attempts to construct an ConnectedMessage from a packet ID & reader.
-    pub fn from(raw: []const u8) !DatagramMessage {
+    pub fn from(raw: []const u8) !ConnectedMessage {
         var stream = std.io.fixedBufferStream(raw);
         const reader = stream.reader();
-        const message_id = try std.meta.intToEnum(DatagramMessageIds, try reader.readByte());
-        return switch (message_id) {
+        return switch (try std.meta.intToEnum(ConnectedMessageIds, try reader.readByte())) {
             .ConnectedPing => @compileError("ConnectedPing is not implemented"),
             .ConnectedPong => @compileError("ConnectedPong is not implemented"),
             .ConnectionRequest => @compileError("ConnectionRequest is not implemented"),
@@ -245,9 +246,6 @@ pub const DatagramMessage = union(DatagramMessageIds) {
             .ConnectionRequestAccepted => try writer.print("ConnectionRequestAccepted {{ client_address: {}, system_index: {}, internal_ids: {any}, request_time: {}, time: {} }}", .{ value.ConnectionRequestAccepted.client_address, value.ConnectionRequestAccepted.system_index, value.ConnectionRequestAccepted.internal_ids, value.ConnectionRequestAccepted.request_time, value.ConnectionRequestAccepted.time }),
             .NewIncomingConnection => try writer.print("NewIncomingConnection {{ address: {any}, internal_address: {any} }}", .{ value.NewIncomingConnection.address, value.NewIncomingConnection.internal_address }),
             .DisconnectionNotification => try writer.print("DisconnectionNotification {{ }}", .{}),
-            .Ack => try writer.print("Ack {{ }}", .{}),
-            .Nack => try writer.print("Nack {{ }}", .{}),
-            .Datagram => try writer.print("Datagram {{ flags: {}, sequence_number: {}, frame_count: {} }}", .{ value.Datagram.flags, value.Datagram.sequence_number, value.Datagram.frames.len }),
         }
     }
 };
