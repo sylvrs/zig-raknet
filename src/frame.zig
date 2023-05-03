@@ -19,7 +19,7 @@ pub const Reliability = enum(u8) {
 };
 
 pub const Frame = union(enum) {
-    const Self = @This();
+    const HasFragmentFlag = 0x10;
 
     Unreliable: struct { fragment: ?Fragment, body: []const u8 },
     UnreliableSequenced: struct { sequence_index: u24, fragment: ?Fragment, body: []const u8 },
@@ -27,8 +27,8 @@ pub const Frame = union(enum) {
     ReliableOrdered: struct { message_index: u24, order: Order, fragment: ?Fragment, body: []const u8 },
 
     fn readFragmentFromFlags(flags: u8, reader: anytype) !?Fragment {
-        return if (flags & 0x10 != 0) {
-            return Fragment{
+        return if (flags & HasFragmentFlag != 0) {
+            return .{
                 .count = try reader.readIntBig(u32),
                 .fragment_id = try reader.readIntBig(u16),
                 .index = try reader.readIntBig(u32),
@@ -38,13 +38,21 @@ pub const Frame = union(enum) {
         };
     }
 
-    pub fn buffer(self: Self) ![]const u8 {
+    pub fn fragment(self: Frame) !?Fragment {
+        return switch (self) {
+            .Unreliable => return self.Unreliable.fragment,
+            .UnreliableSequenced => return self.UnreliableSequenced.fragment,
+            .Reliable => return self.Reliable.fragment,
+            .ReliableOrdered => return self.ReliableOrdered.fragment,
+        };
+    }
+
+    pub fn body(self: Frame) ![]const u8 {
         return switch (self) {
             .Unreliable => return self.Unreliable.body,
             .UnreliableSequenced => return self.UnreliableSequenced.body,
             .Reliable => return self.Reliable.body,
             .ReliableOrdered => return self.ReliableOrdered.body,
-            else => unreachable,
         };
     }
 
@@ -54,36 +62,30 @@ pub const Frame = union(enum) {
         return allocated_buffer[0..bytes_read];
     }
 
-    pub fn from(reader: anytype, allocator: std.mem.Allocator) !Self {
+    pub fn from(reader: anytype, allocator: std.mem.Allocator) !Frame {
         const flags = try reader.readByte();
         const buffer_size = try reader.readIntBig(u16) + 7 << 3;
         // make sure to free after use
         return switch (try Reliability.fromFlags(flags)) {
             .Unreliable => {
-                return .{
-                    .Unreliable = .{
-                        .fragment = try readFragmentFromFlags(flags, reader),
-                        .body = try readBuffer(reader, buffer_size, allocator),
-                    },
-                };
+                return .{ .Unreliable = .{
+                    .fragment = try readFragmentFromFlags(flags, reader),
+                    .body = try readBuffer(reader, buffer_size, allocator),
+                } };
             },
             .UnreliableSequenced => {
-                return .{
-                    .UnreliableSequenced = .{
-                        .sequence_index = try reader.readIntLittle(u24),
-                        .fragment = try readFragmentFromFlags(flags, reader),
-                        .body = try readBuffer(reader, buffer_size, allocator),
-                    },
-                };
+                return .{ .UnreliableSequenced = .{
+                    .sequence_index = try reader.readIntLittle(u24),
+                    .fragment = try readFragmentFromFlags(flags, reader),
+                    .body = try readBuffer(reader, buffer_size, allocator),
+                } };
             },
             .Reliable => {
-                return .{
-                    .Reliable = .{
-                        .message_index = try reader.readIntLittle(u24),
-                        .fragment = try readFragmentFromFlags(flags, reader),
-                        .body = try readBuffer(reader, buffer_size, allocator),
-                    },
-                };
+                return .{ .Reliable = .{
+                    .message_index = try reader.readIntLittle(u24),
+                    .fragment = try readFragmentFromFlags(flags, reader),
+                    .body = try readBuffer(reader, buffer_size, allocator),
+                } };
             },
             .ReliableOrdered => {
                 return .{ .ReliableOrdered = .{
