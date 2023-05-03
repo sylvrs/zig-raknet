@@ -182,23 +182,23 @@ pub const DataMessage = union(enum) {
             return error.InvalidOnlineMessageId;
         }
 
-        return switch (true) {
-            pid & @enumToInt(DataMessageFlags.Ack) != 0 => .{ .Ack = .{} },
-            pid & @enumToInt(DataMessageFlags.Nack) != 0 => .{ .Nack = .{} },
-            else => {
-                // reset to the beginning of the packet
-                stream.reset();
-                const flags = try reader.readByte();
-                const sequence_number = try reader.readIntLittle(u24);
-                // we do not need to call deinit here because `toOwnedSlice` handles it for us
-                var frames = std.ArrayList(frame.Frame).init(allocator);
-                while (try stream.getPos() < try stream.getEndPos()) {
-                    try frames.append(try frame.Frame.from(reader, allocator));
-                }
-                // todo: deallocate frames after use
-                return .{ .Datagram = .{ .flags = flags, .sequence_number = sequence_number, .frames = try frames.toOwnedSlice() } };
-            },
-        };
+        if (pid & @enumToInt(DataMessageFlags.Ack) != 0) {
+            return .{ .Ack = .{} };
+        } else if (pid & @enumToInt(DataMessageFlags.Nack) != 0) {
+            return .{ .Nack = .{} };
+        } else {
+            // reset to the beginning of the packet
+            stream.reset();
+            const flags = try reader.readByte();
+            const sequence_number = try reader.readIntLittle(u24);
+            // we do not need to call deinit here because `toOwnedSlice` handles it for us
+            var frames = std.ArrayList(frame.Frame).init(allocator);
+            while (try stream.getPos() < try stream.getEndPos()) {
+                try frames.append(try frame.Frame.from(reader, allocator));
+            }
+            // todo: deallocate frames after use
+            return .{ .Datagram = .{ .flags = flags, .sequence_number = sequence_number, .frames = try frames.toOwnedSlice() } };
+        }
     }
 };
 
