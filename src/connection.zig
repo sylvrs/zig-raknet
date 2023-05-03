@@ -18,7 +18,7 @@ pub const Connection = struct {
     latency: u64 = 0,
     state: ConnectionState = .Initializing,
 
-    pub fn handleMessage(self: *Connection, msg: message.ConnectedMessage) !void {
+    pub fn handleMessage(self: *Connection, msg: message.DataMessage) !void {
         self.server.logInfo("[connection: {}]: Received message: {}", .{ self.address, msg });
     }
 
