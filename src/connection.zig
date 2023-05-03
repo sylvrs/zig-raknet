@@ -18,12 +18,13 @@ pub const Connection = struct {
     latency: u64 = 0,
     state: ConnectionState = .Initializing,
 
-    pub fn handleMessage(self: *Connection, msg: message.OnlineMessage) !void {
+    pub fn handleMessage(self: *Connection, msg: message.ConnectedMessage) !void {
         self.server.logInfo("[connection: {}]: Received message: {}", .{ self.address, msg });
     }
 
     pub fn sendMessage(self: *Connection, msg: []const u8) !void {
-        try self.server.sendMessage(self.address, msg);
+        _ = msg;
+        _ = self;
     }
 
     pub fn format(value: @This(), comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
