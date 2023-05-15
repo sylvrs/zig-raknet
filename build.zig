@@ -13,16 +13,16 @@ pub fn build(b: *std.Build) void {
         },
     });
 
-    const executable = b.addExecutable(.{
+    const example_exe = b.addExecutable(.{
         .name = "raknet_example",
         .root_source_file = .{ .path = "examples/example.zig" },
         .target = target,
         .optimize = optimize,
     });
-    executable.addModule("raknet", module);
-    executable.addModule("network", network_module);
-    const artifact = b.addInstallArtifact(executable);
-    const executable_step = b.step("example", "Builds the main example");
+    example_exe.addModule("raknet", module);
+    example_exe.addModule("network", network_module);
+    const artifact = b.addRunArtifact(example_exe);
+    const executable_step = b.step("example", "Runs the main example");
     executable_step.dependOn(&artifact.step);
 
     const main_tests = b.addTest(.{
@@ -30,6 +30,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+
     const test_artifact = b.addRunArtifact(main_tests);
     main_tests.addModule("raknet", module);
     main_tests.addModule("network", network_module);
