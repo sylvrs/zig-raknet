@@ -27,7 +27,7 @@ pub const Frame = union(enum) {
     ReliableOrdered: struct { message_index: u24, order: Order, fragment: ?Fragment, body: []const u8 },
 
     fn readFragmentFromFlags(flags: u8, reader: anytype) !?Fragment {
-        return if (flags & HasFragmentFlag != 0) {
+        if (flags & HasFragmentFlag != 0) {
             return .{
                 .count = try reader.readIntBig(u32),
                 .fragment_id = try reader.readIntBig(u16),
@@ -35,24 +35,24 @@ pub const Frame = union(enum) {
             };
         } else {
             return null;
-        };
+        }
     }
 
     pub fn fragment(self: Frame) !?Fragment {
         return switch (self) {
-            .Unreliable => return self.Unreliable.fragment,
-            .UnreliableSequenced => return self.UnreliableSequenced.fragment,
-            .Reliable => return self.Reliable.fragment,
-            .ReliableOrdered => return self.ReliableOrdered.fragment,
+            .Unreliable => self.Unreliable.fragment,
+            .UnreliableSequenced => self.UnreliableSequenced.fragment,
+            .Reliable => self.Reliable.fragment,
+            .ReliableOrdered => self.ReliableOrdered.fragment,
         };
     }
 
     pub fn body(self: Frame) ![]const u8 {
         return switch (self) {
-            .Unreliable => return self.Unreliable.body,
-            .UnreliableSequenced => return self.UnreliableSequenced.body,
-            .Reliable => return self.Reliable.body,
-            .ReliableOrdered => return self.ReliableOrdered.body,
+            .Unreliable => self.Unreliable.body,
+            .UnreliableSequenced => self.UnreliableSequenced.body,
+            .Reliable => self.Reliable.body,
+            .ReliableOrdered => self.ReliableOrdered.body,
         };
     }
 
