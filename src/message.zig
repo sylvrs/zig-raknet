@@ -227,13 +227,13 @@ pub const ConnectedMessage = union(ConnectedMessageIds) {
         var stream = std.io.fixedBufferStream(raw);
         const reader = stream.reader();
         return switch (try std.meta.intToEnum(ConnectedMessageIds, try reader.readByte())) {
-            .ConnectedPing => @compileError("ConnectedPing is not implemented"),
-            .ConnectedPong => @compileError("ConnectedPong is not implemented"),
-            .ConnectionRequest => @compileError("ConnectionRequest is not implemented"),
-            .ConnectionRequestAccepted => @compileError("ConnectionRequestAccepted is not implemented"),
-            .NewIncomingConnection => @compileError("NewIncomingConnection is not implemented"),
+            .ConnectedPing => @panic("ConnectedPing is not implemented"),
+            .ConnectedPong => @panic("ConnectedPong is not implemented"),
+            .ConnectionRequest => @panic("ConnectionRequest is not implemented"),
+            .ConnectionRequestAccepted => @panic("ConnectionRequestAccepted is not implemented"),
+            .NewIncomingConnection => @panic("NewIncomingConnection is not implemented"),
             .DisconnectionNotification => .{ .DisconnectionNotification = .{} },
-            .UserMessage => @compileError("UserMessage is not implemented"),
+            .UserMessage => @panic("UserMessage is not implemented"),
         };
     }
 
