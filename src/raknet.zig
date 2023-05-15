@@ -13,7 +13,6 @@ pub const RakNetProtocolVersion = 11;
 pub const MaxMTUSize = 1500;
 
 pub const Server = struct {
-    const MAX_MESSAGE_SIZE: usize = 65535;
     name: []const u8,
     guid: i64,
     address: network.EndPoint,
@@ -149,7 +148,7 @@ pub const Server = struct {
     }
 
     pub fn sendUnconnectedMessage(self: *Server, receiver: network.EndPoint, msg: message.UnconnectedMessage) !void {
-        var write_buffer = [_]u8{0} ** MAX_MESSAGE_SIZE;
+        var write_buffer = [_]u8{0} ** MaxMTUSize;
         var stream = std.io.fixedBufferStream(&write_buffer);
         var writer = stream.writer();
         try msg.encode(writer);
