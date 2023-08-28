@@ -1,10 +1,10 @@
 const std = @import("std");
 const network = @import("network");
 const message = @import("message.zig");
-const connection = @import("connection.zig");
+const Connection = @import("Connection.zig");
 
 /// The magic bytes used to identify an offline message in RakNet
-pub const RakNetMagic: [16]u8 = [_]u8{ 0x00, 0xff, 0xff, 0x00, 0xfe, 0xfe, 0xfe, 0xfe, 0xfd, 0xfd, 0xfd, 0xfd, 0x12, 0x34, 0x56, 0x78 };
+pub const RakNetMagic: []const u8 = &.{ 0x00, 0xff, 0xff, 0x00, 0xfe, 0xfe, 0xfe, 0xfe, 0xfd, 0xfd, 0xfd, 0xfd, 0x12, 0x34, 0x56, 0x78 };
 /// The types of errors that can occur while processing a RakNet message
 pub const RakNetError = error{InvalidMagic};
 /// The current version of the RakNet protocol
@@ -16,7 +16,7 @@ pub const Server = struct {
     name: []const u8,
     guid: i64,
     address: network.EndPoint,
-    connections: std.AutoHashMap(network.EndPoint, connection.Connection),
+    connections: std.AutoHashMap(network.EndPoint, Connection),
     allocator: std.mem.Allocator,
     running: bool = true,
     verbose: bool = false,
@@ -27,7 +27,7 @@ pub const Server = struct {
             .name = name,
             .guid = guid,
             .address = address,
-            .connections = std.AutoHashMap(network.EndPoint, connection.Connection).init(allocator),
+            .connections = std.AutoHashMap(network.EndPoint, Connection).init(allocator),
             .allocator = allocator,
         };
     }
@@ -118,7 +118,7 @@ pub const Server = struct {
                     message.UnconnectedMessage.createOpenConnectionReply1(
                         self.guid,
                         false,
-                        @intCast(i16, received_message.OpenConnectionRequest1.mtu_padding.len),
+                        @intCast(received_message.OpenConnectionRequest1.mtu_padding.len),
                     ),
                 );
             },
@@ -134,7 +134,7 @@ pub const Server = struct {
                     ),
                 );
                 // create connection
-                var new_connection = connection.Connection{
+                var new_connection = Connection{
                     .address = sender,
                     .server = self,
                     .mtu_size = received_message.OpenConnectionRequest2.mtu_size,

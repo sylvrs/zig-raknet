@@ -3,9 +3,8 @@ const raknet = @import("raknet");
 const network = @import("network");
 
 /// This is a Minecraft-specific server list ping format
-pub const ServerHeaderType = enum { MCPE, MCEE };
 pub const ServerNameFormat = struct {
-    header: ServerHeaderType,
+    header: enum { mcpe, mcee },
     motd: []const u8,
     protocol_version: u32,
     game_version: []const u8,
@@ -21,8 +20,8 @@ pub const ServerNameFormat = struct {
     pub fn toString(self: ServerNameFormat, buf: []u8) ![]const u8 {
         return try std.fmt.bufPrint(buf, "{s};{s};{d};{s};{d};{d};{d};{s};{s};{d};{d};{d};", .{
             switch (self.header) {
-                .MCPE => "MCPE",
-                .MCEE => "MCEE",
+                .mcpe => "MCPE",
+                .mcee => "MCEE",
             },
             self.motd,
             self.protocol_version,
@@ -65,10 +64,10 @@ pub fn main() !void {
     var guid = rand.int(i64);
     // server name format
     const server_format = ServerNameFormat{
-        .header = .MCPE,
+        .header = .mcpe,
         .motd = "Hello from Zig!",
         .protocol_version = 575,
-        .game_version = "1.19.81",
+        .game_version = "1.20.19",
         .player_count = 0,
         .max_player_count = 20,
         .server_guid = guid,
