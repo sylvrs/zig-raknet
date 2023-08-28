@@ -74,12 +74,7 @@ pub const UnconnectedMessage = union(UnconnectedMessageIds) {
                 const ping_time = try reader.readIntBig(i64);
                 try helpers.verifyMagic(reader);
                 const client_guid = try reader.readIntBig(i64);
-                return .{
-                    .UnconnectedPing = .{
-                        .ping_time = ping_time,
-                        .client_guid = client_guid,
-                    },
-                };
+                return .{ .UnconnectedPing = .{ .ping_time = ping_time, .client_guid = client_guid } };
             },
             .OpenConnectionRequest1 => {
                 try helpers.verifyMagic(reader);
@@ -113,28 +108,26 @@ pub const UnconnectedMessage = union(UnconnectedMessageIds) {
     }
 
     pub fn encode(self: UnconnectedMessage, writer: anytype) !void {
+        try writer.writeByte(@intFromEnum(self));
         return switch (self) {
-            .UnconnectedPong => {
-                try writer.writeByte(@enumToInt(self));
-                try writer.writeIntBig(i64, self.UnconnectedPong.pong_time);
-                try writer.writeIntBig(i64, self.UnconnectedPong.server_guid);
-                try writer.writeAll(&RakNetMagic);
-                try helpers.writeString(writer, self.UnconnectedPong.server_name);
+            .UnconnectedPong => |pong| {
+                try writer.writeIntBig(i64, pong.pong_time);
+                try writer.writeIntBig(i64, pong.server_guid);
+                try writer.writeAll(RakNetMagic);
+                try helpers.writeString(writer, pong.server_name);
             },
-            .OpenConnectionReply1 => {
-                try writer.writeByte(@enumToInt(self));
-                try writer.writeAll(&RakNetMagic);
-                try writer.writeIntBig(i64, self.OpenConnectionReply1.server_guid);
-                try writer.writeByte(@boolToInt(self.OpenConnectionReply1.use_security));
-                try writer.writeIntBig(i16, self.OpenConnectionReply1.mtu_size);
+            .OpenConnectionReply1 => |reply1| {
+                try writer.writeAll(RakNetMagic);
+                try writer.writeIntBig(i64, reply1.server_guid);
+                try writer.writeByte(@intFromBool(reply1.use_security));
+                try writer.writeIntBig(i16, reply1.mtu_size);
             },
-            .OpenConnectionReply2 => {
-                try writer.writeByte(@enumToInt(self));
-                try writer.writeAll(&RakNetMagic);
-                try writer.writeIntBig(i64, self.OpenConnectionReply2.server_guid);
-                try helpers.writeAddress(writer, self.OpenConnectionReply2.client_address);
-                try writer.writeIntBig(i16, self.OpenConnectionReply2.mtu_size);
-                try writer.writeByte(@boolToInt(self.OpenConnectionReply2.encryption_enabled));
+            .OpenConnectionReply2 => |reply2| {
+                try writer.writeAll(RakNetMagic);
+                try writer.writeIntBig(i64, reply2.server_guid);
+                try helpers.writeAddress(writer, reply2.client_address);
+                try writer.writeIntBig(i16, reply2.mtu_size);
+                try writer.writeByte(@intFromBool(reply2.encryption_enabled));
             },
             else => error.UnsupportedOfflineMessageId,
         };
@@ -142,14 +135,29 @@ pub const UnconnectedMessage = union(UnconnectedMessageIds) {
 
     /// Custom formatter for OfflineMessage.
     pub fn format(value: @This(), comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
+        // we could use comptime here w/ @tagName but this is more concise
         switch (value) {
-            .UnconnectedPing => try writer.print("UnconnectedPing {{ ping_time: {}, client_guid: {} }}", .{ value.UnconnectedPing.ping_time, value.UnconnectedPing.client_guid }),
-            .UnconnectedPong => try writer.print("UnconnectedPong {{ pong_time: {}, server_guid: {}, server_name: {s} }}", .{ value.UnconnectedPong.pong_time, value.UnconnectedPong.server_guid, value.UnconnectedPong.server_name }),
-            .OpenConnectionRequest1 => try writer.print("OpenConnectionRequest1 {{ protocol_version: {}, mtu_size: {} }}", .{ value.OpenConnectionRequest1.protocol_version, value.OpenConnectionRequest1.mtu_padding.len }),
-            .OpenConnectionReply1 => try writer.print("OpenConnectionReply1 {{ server_guid: {}, use_security: {}, mtu_size: {} }}", .{ value.OpenConnectionReply1.server_guid, value.OpenConnectionReply1.use_security, value.OpenConnectionReply1.mtu_size }),
-            .OpenConnectionRequest2 => try writer.print("OpenConnectionRequest2 {{ server_address: {}, mtu_size: {}, client_guid: {} }}", .{ value.OpenConnectionRequest2.server_address, value.OpenConnectionRequest2.mtu_size, value.OpenConnectionRequest2.client_guid }),
-            .OpenConnectionReply2 => try writer.print("OpenConnectionReply2 {{ server_guid: {}, client_address: {}, mtu_size: {}, encryption_enabled: {} }}", .{ value.OpenConnectionReply2.server_guid, value.OpenConnectionReply2.client_address, value.OpenConnectionReply2.mtu_size, value.OpenConnectionReply2.encryption_enabled }),
-            .IncompatibleProtocolVersion => try writer.print("IncompatibleProtocolVersion {{ protocol: {}, server_guid: {} }}", .{ value.IncompatibleProtocolVersion.protocol, value.IncompatibleProtocolVersion.server_guid }),
+            .UnconnectedPing => |msg| try writer.print("UnconnectedPing {{ ping_time: {}, client_guid: {} }}", .{ msg.ping_time, msg.client_guid }),
+            .UnconnectedPong => |msg| try writer.print(
+                "UnconnectedPong {{ pong_time: {}, server_guid: {}, server_name: {s} }}",
+                .{ msg.pong_time, msg.server_guid, msg.server_name },
+            ),
+            .OpenConnectionRequest1 => |msg| try writer.print(
+                "OpenConnectionRequest1 {{ protocol_version: {}, mtu_size: {} }}",
+                .{ msg.protocol_version, msg.mtu_padding.len },
+            ),
+            .OpenConnectionReply1 => |msg| try writer.print(
+                "OptionConnectionReply1 {{ server_guid: {}, use_security: {}, mtu_size: {} }}",
+                .{ msg.server_guid, msg.use_security, msg.mtu_size },
+            ),
+            .OpenConnectionRequest2 => |msg| try writer.print(
+                "OpenConnectionRequest1 {{ server_address: {}, mtu_size: {}, client_guid: {} }}",
+                .{ msg.server_address, msg.mtu_size, msg.client_guid },
+            ),
+            .OpenConnectionReply2 => |msg| try writer.print(
+                "OptionConnectionReply1 {{ server_guid: {}, client_address: {}, mtu_size: {}, encryption_enabled: {} }}",
+                .{ msg.server_guid, msg.client_address, msg.mtu_size, msg.encryption_enabled },
+            ),
         }
     }
 };
@@ -157,7 +165,16 @@ pub const UnconnectedMessage = union(UnconnectedMessageIds) {
 /// Data messages are the outermost packet layer of connections.
 /// Each datagram must have the Datagram flag set.
 /// The Ack and Nack flags are mutually exclusive.
-pub const DataMessageFlags = enum(u8) { Datagram = 0x80, Ack = 0x40, Nack = 0x20 };
+pub const DataMessageFlags = enum(u8) {
+    Datagram = 0x80,
+    Ack = 0x40,
+    Nack = 0x20,
+
+    /// Returns the flags as a byte.
+    pub fn ordinal(self: DataMessageFlags) u8 {
+        return @intFromEnum(self);
+    }
+};
 pub const DataMessage = union(enum) {
     Ack: struct {},
     Nack: struct {},
@@ -178,13 +195,13 @@ pub const DataMessage = union(enum) {
         const reader = stream.reader();
         const pid = try reader.readByte();
         // if bitwise-and gives us 0, then it's not a valid Datagram
-        if (pid & @enumToInt(DataMessageFlags.Datagram) == 0) {
+        if (pid & DataMessageFlags.Datagram.ordinal() == 0) {
             return error.InvalidOnlineMessageId;
         }
 
-        if (pid & @enumToInt(DataMessageFlags.Ack) != 0) {
+        if (pid & DataMessageFlags.Ack.ordinal() != 0) {
             return .{ .Ack = .{} };
-        } else if (pid & @enumToInt(DataMessageFlags.Nack) != 0) {
+        } else if (pid & DataMessageFlags.Nack.ordinal() != 0) {
             return .{ .Nack = .{} };
         } else {
             // reset to the beginning of the packet
@@ -239,12 +256,19 @@ pub const ConnectedMessage = union(ConnectedMessageIds) {
 
     /// Custom parser for OnlineMessage
     pub fn format(value: @This(), comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
+        // we could use comptime here w/ @tagName but this is more concise
         switch (value) {
-            .ConnectedPing => try writer.print("ConnectedPing {{ ping_time: {} }}", .{value.ConnectedPing.ping_time}),
-            .ConnectedPong => try writer.print("ConnectedPong {{ ping_time: {}, pong_time: {} }}", .{ value.ConnectedPong.ping_time, value.ConnectedPong.pong_time }),
-            .ConnectionRequest => try writer.print("ConnectionRequest {{ client_guid: {}, time: {} }}", .{ value.ConnectionRequest.client_guid, value.ConnectionRequest.time }),
-            .ConnectionRequestAccepted => try writer.print("ConnectionRequestAccepted {{ client_address: {}, system_index: {}, internal_ids: {any}, request_time: {}, time: {} }}", .{ value.ConnectionRequestAccepted.client_address, value.ConnectionRequestAccepted.system_index, value.ConnectionRequestAccepted.internal_ids, value.ConnectionRequestAccepted.request_time, value.ConnectionRequestAccepted.time }),
-            .NewIncomingConnection => try writer.print("NewIncomingConnection {{ address: {any}, internal_address: {any} }}", .{ value.NewIncomingConnection.address, value.NewIncomingConnection.internal_address }),
+            .ConnectedPing => |msg| try writer.print("ConnectedPing {{ ping_time: {} }}", .{msg.ping_time}),
+            .ConnectedPong => |msg| try writer.print("ConnectedPong {{ ping_time: {}, pong_time: {} }}", .{ msg.ping_time, msg.pong_time }),
+            .ConnectionRequest => |msg| try writer.print("ConnectionRequest {{ client_guid: {}, time: {} }}", .{ msg.client_guid, msg.time }),
+            .ConnectionRequestAccepted => |msg| try writer.print(
+                "ConnectionRequestAccepted {{ client_address: {}, system_index: {}, internal_ids: {any}, request_time: {}, time: {} }}",
+                .{ msg.client_address, msg.system_index, msg.internal_ids, msg.request_time, msg.time },
+            ),
+            .NewIncomingConnection => |msg| try writer.print(
+                "NewIncomingConnection {{ address: {any}, internal_address: {any} }}",
+                .{ msg.address, msg.internal_address },
+            ),
             .DisconnectionNotification => try writer.print("DisconnectionNotification {{ }}", .{}),
         }
     }

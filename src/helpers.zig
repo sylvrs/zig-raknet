@@ -5,7 +5,7 @@ const RakNetMagic = @import("raknet.zig").RakNetMagic;
 
 /// Writes a string to the writer.
 pub fn writeString(writer: anytype, value: []const u8) !void {
-    try writer.writeIntBig(u16, @intCast(u16, value.len));
+    try writer.writeIntBig(u16, @intCast(value.len));
     try writer.writeAll(value);
 }
 
@@ -19,21 +19,10 @@ pub fn readStringBuffer(reader: anytype, buffer: []u8) !usize {
     return length;
 }
 
-/// Reads a string from the reader into a buffer allocated with the given allocator.
-pub fn readStringAlloc(reader: anytype, allocator: std.mem.Allocator) ![]const u8 {
-    const length = try reader.readIntBig(u16);
-    const buffer = try allocator.alloc(u8, length);
-    const read_bytes = try reader.readAtLeast(buffer, length);
-    if (read_bytes != length) {
-        return error.MismatchedStringLength;
-    }
-    return buffer[0..length];
-}
-
 /// Verifies that the magic bytes read from the current position of the reader match the expected magic bytes.
 pub fn verifyMagic(reader: anytype) RakNetError!void {
     const received_magic = try reader.readBoundedBytes(RakNetMagic.len);
-    if (!std.mem.eql(u8, &RakNetMagic, received_magic.buffer[0..received_magic.len])) {
+    if (!std.mem.eql(u8, RakNetMagic, received_magic.buffer[0..received_magic.len])) {
         return RakNetError.InvalidMagic;
     }
 }
@@ -76,21 +65,21 @@ pub fn readAddress(reader: anytype) !network.EndPoint {
 /// Writes a network endpoint (ip + port) to the writer.
 pub fn writeAddress(writer: anytype, endpoint: network.EndPoint) !void {
     return switch (endpoint.address) {
-        .ipv4 => {
+        .ipv4 => |ipv4| {
             try writer.writeByte(4);
-            try writer.writeAll(&endpoint.address.ipv4.value);
+            try writer.writeAll(&ipv4.value);
             try writer.writeIntBig(u16, endpoint.port);
         },
-        .ipv6 => {
+        .ipv6 => |ipv6| {
             try writer.writeByte(6);
             // AF_INET6
             try writer.writeIntLittle(i16, std.os.AF.INET6);
-            try writer.writeIntBig(i16, @intCast(i16, endpoint.port));
+            try writer.writeIntBig(i16, @as(i16, @intCast(endpoint.port)));
             // flow info
             try writer.writeIntBig(u32, 0);
-            try writer.writeAll(&endpoint.address.ipv6.value);
+            try writer.writeAll(&ipv6.value);
             // scope id
-            try writer.writeIntBig(u32, endpoint.address.ipv6.scope_id);
+            try writer.writeIntBig(u32, ipv6.scope_id);
         },
     };
 }
@@ -121,20 +110,6 @@ test "read string using buffer correctly" {
     var buffer = [_]u8{0} ** 1024;
     const size = try readStringBuffer(reader, &buffer);
     const value = buffer[0..size];
-    // check that the read string is correct
-    try std.testing.expectEqualStrings(expected, value);
-}
-
-test "read string using allocator correctly" {
-    const expected = "test string";
-    // create stream & reader
-    const read_buffer = [_]u8{ 0x00, 0x0b, 0x74, 0x65, 0x73, 0x74, 0x20, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67 };
-    var stream = std.io.fixedBufferStream(&read_buffer);
-    const reader = stream.reader();
-    // read string into buffer
-    var allocator = std.testing.allocator;
-    const value = try readStringAlloc(reader, allocator);
-    defer allocator.free(value);
     // check that the read string is correct
     try std.testing.expectEqualStrings(expected, value);
 }
