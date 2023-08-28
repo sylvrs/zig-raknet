@@ -1,6 +1,6 @@
 # zig-raknet
 
-A simple RakNet server implementation in the [Zig](https://ziglang.org) programming language.
+A simple RakNet implementation in the [Zig](https://ziglang.org) programming language.
 
 ## Note
 
@@ -21,14 +21,6 @@ The library can be installed using Zig's in-progress package manager:
             // this hash value can be fetched from the error message when trying to build the project
             // there is no current way to get the hash value automatically as the package manager is
             // still very much so an *in-progress* project.
-            .hash = "HASHED_VALUE_HERE",
-        },
-        // zig-network is used for networking
-        //
-        // in the future, there will be no need to install this package as the useful parts
-        // of the library will be exposed in zig-raknet
-        .network = .{
-            .url = "https://github.com/sylvrs/zig-raknet/archive/refs/heads/master.tar.gz",
             .hash = "HASHED_VALUE_HERE",
         },
     },
