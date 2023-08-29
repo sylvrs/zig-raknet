@@ -1,7 +1,7 @@
 const std = @import("std");
 const network = @import("network");
-const RakNetError = @import("raknet.zig").RakNetError;
-const RakNetMagic = @import("raknet.zig").RakNetMagic;
+const RakNetError = @import("../raknet.zig").RakNetError;
+const RakNetMagic = @import("../raknet.zig").RakNetMagic;
 
 /// Writes a string to the writer.
 pub fn writeString(writer: anytype, value: []const u8) !void {

@@ -1,9 +1,8 @@
 const std = @import("std");
 const network = @import("network");
-const raknet = @import("raknet.zig");
+const helpers = @import("../utils/helpers.zig");
+const raknet = @import("../raknet.zig");
 const RakNetMagic = raknet.RakNetMagic;
-const helpers = @import("helpers.zig");
-const frame = @import("frame.zig");
 
 pub const UnconnectedMessageIds = enum(u8) {
     UnconnectedPing = 0x01,
@@ -158,168 +157,10 @@ pub const UnconnectedMessage = union(UnconnectedMessageIds) {
                 "OptionConnectionReply1 {{ server_guid: {}, client_address: {}, mtu_size: {}, encryption_enabled: {} }}",
                 .{ msg.server_guid, msg.client_address, msg.mtu_size, msg.encryption_enabled },
             ),
-        }
-    }
-};
-
-/// Data messages are the outermost packet layer of connections.
-/// Each datagram must have the Datagram flag set.
-/// The Ack and Nack flags are mutually exclusive.
-pub const DataMessageFlags = enum(u8) {
-    Datagram = 0x80,
-    Ack = 0x40,
-    Nack = 0x20,
-
-    /// Returns the flags as a byte.
-    pub fn ordinal(self: DataMessageFlags) u8 {
-        return @intFromEnum(self);
-    }
-};
-pub const DataMessage = union(enum) {
-    Ack: struct {},
-    Nack: struct {},
-    Datagram: struct { flags: u8, sequence_number: u24, frames: []frame.Frame },
-
-    /// Custom parser for ConnectedMessage
-    pub fn format(value: @This(), comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
-        switch (value) {
-            .Ack => try writer.print("Ack {{ }}", .{}),
-            .Nack => try writer.print("Nack {{ }}", .{}),
-            .Datagram => try writer.print("Datagram {{ flags: {}, sequence_number: {}, frame_count: {} }}", .{ value.Datagram.flags, value.Datagram.sequence_number, value.Datagram.frames.len }),
-        }
-    }
-
-    /// Attempts to construct an ConnectedMessage from a packet ID & reader.
-    pub fn from(allocator: std.mem.Allocator, raw: []const u8) !DataMessage {
-        var stream = std.io.fixedBufferStream(raw);
-        const reader = stream.reader();
-        const pid = try reader.readByte();
-        // if bitwise-and gives us 0, then it's not a valid Datagram
-        if (pid & DataMessageFlags.Datagram.ordinal() == 0) {
-            return error.InvalidOnlineMessageId;
-        }
-
-        if (pid & DataMessageFlags.Ack.ordinal() != 0) {
-            return .{ .Ack = .{} };
-        } else if (pid & DataMessageFlags.Nack.ordinal() != 0) {
-            return .{ .Nack = .{} };
-        } else {
-            // reset to the beginning of the packet
-            stream.reset();
-            const flags = try reader.readByte();
-            const sequence_number = try reader.readIntLittle(u24);
-            // we do not need to call deinit here because `toOwnedSlice` handles it for us
-            var frames = std.ArrayList(frame.Frame).init(allocator);
-            while (try stream.getPos() < try stream.getEndPos()) {
-                try frames.append(try frame.Frame.from(reader, allocator));
-            }
-            // todo: deallocate frames after use
-            return .{ .Datagram = .{ .flags = flags, .sequence_number = sequence_number, .frames = try frames.toOwnedSlice() } };
-        }
-    }
-};
-
-/// Connected messages are the inner layer of the Datagram type of the DataMessage.
-pub const ConnectedMessageIds = enum(u8) {
-    ConnectedPing = 0x00,
-    ConnectedPong = 0x03,
-    ConnectionRequest = 0x09,
-    ConnectionRequestAccepted = 0x10,
-    NewIncomingConnection = 0x13,
-    DisconnectionNotification = 0x15,
-    UserMessage = 0x86,
-};
-
-pub const ConnectedMessage = union(ConnectedMessageIds) {
-    ConnectedPing: struct { ping_time: i64 },
-    ConnectedPong: struct { ping_time: i64, pong_time: i64 },
-    ConnectionRequest: struct { client_guid: i64, time: i64 },
-    ConnectionRequestAccepted: struct { client_address: network.EndPoint, system_index: i16, internal_ids: []network.EndPoint, request_time: i64, time: i64 },
-    NewIncomingConnection: struct { address: network.EndPoint, internal_address: network.EndPoint },
-    DisconnectionNotification: struct {},
-    UserMessage: struct { id: u32, buffer: []const u8 },
-
-    /// Attempts to construct an ConnectedMessage from a packet ID & reader.
-    pub fn from(raw: []const u8) !ConnectedMessage {
-        var stream = std.io.fixedBufferStream(raw);
-        const reader = stream.reader();
-        return switch (try std.meta.intToEnum(ConnectedMessageIds, try reader.readByte())) {
-            .ConnectedPing => @panic("ConnectedPing is not implemented"),
-            .ConnectedPong => @panic("ConnectedPong is not implemented"),
-            .ConnectionRequest => @panic("ConnectionRequest is not implemented"),
-            .ConnectionRequestAccepted => @panic("ConnectionRequestAccepted is not implemented"),
-            .NewIncomingConnection => @panic("NewIncomingConnection is not implemented"),
-            .DisconnectionNotification => .{ .DisconnectionNotification = .{} },
-            .UserMessage => @panic("UserMessage is not implemented"),
-        };
-    }
-
-    /// Custom parser for OnlineMessage
-    pub fn format(value: @This(), comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
-        // we could use comptime here w/ @tagName but this is more concise
-        switch (value) {
-            .ConnectedPing => |msg| try writer.print("ConnectedPing {{ ping_time: {} }}", .{msg.ping_time}),
-            .ConnectedPong => |msg| try writer.print("ConnectedPong {{ ping_time: {}, pong_time: {} }}", .{ msg.ping_time, msg.pong_time }),
-            .ConnectionRequest => |msg| try writer.print("ConnectionRequest {{ client_guid: {}, time: {} }}", .{ msg.client_guid, msg.time }),
-            .ConnectionRequestAccepted => |msg| try writer.print(
-                "ConnectionRequestAccepted {{ client_address: {}, system_index: {}, internal_ids: {any}, request_time: {}, time: {} }}",
-                .{ msg.client_address, msg.system_index, msg.internal_ids, msg.request_time, msg.time },
+            .IncompatibleProtocolVersion => |msg| try writer.print(
+                "IncompatibleProtocolVersion {{ protocol: {}, server_guid: {} }}",
+                .{ msg.protocol, msg.server_guid },
             ),
-            .NewIncomingConnection => |msg| try writer.print(
-                "NewIncomingConnection {{ address: {any}, internal_address: {any} }}",
-                .{ msg.address, msg.internal_address },
-            ),
-            .DisconnectionNotification => try writer.print("DisconnectionNotification {{ }}", .{}),
         }
     }
 };
-
-pub const MessageBuilder = struct {
-    count: u32,
-    allocator: std.mem.Allocator,
-    pending_frames: std.AutoHashMap(u32, []const u8),
-
-    pub fn init(count: u32, allocator: std.mem.Allocator) !MessageBuilder {
-        return .{
-            .count = count,
-            .allocator = allocator,
-            .pending_frames = std.AutoHashMap(u32, []const u8).init(allocator),
-        };
-    }
-
-    pub fn add(self: *MessageBuilder, current_frame: frame.Frame) !void {
-        if (try current_frame.fragment()) |fragment| {
-            try self.pending_frames.put(
-                fragment.fragment_id,
-                try current_frame.body(),
-            );
-        } else {
-            return error.InvalidFragment;
-        }
-    }
-
-    pub fn complete(self: *MessageBuilder) bool {
-        return self.pending_frames.count() == self.count;
-    }
-
-    pub fn build(self: *MessageBuilder) ![]const u8 {
-        if (!self.complete()) {
-            return error.IncompleteMessage;
-        }
-        var list = std.ArrayList(u8).init(self.allocator);
-        var iterator = self.pending_frames.valueIterator();
-        while (iterator.next()) |value| {
-            try list.appendSlice(value.*);
-        }
-        defer {
-            var destruction_iterator = self.pending_frames.valueIterator();
-            while (destruction_iterator.next()) |value| {
-                self.allocator.free(value.*);
-            }
-            self.pending_frames.deinit();
-        }
-        return try list.toOwnedSlice();
-    }
-};
-
-test "test message builder allocation" {}

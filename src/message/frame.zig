@@ -40,19 +40,13 @@ pub const Frame = union(enum) {
 
     pub fn fragment(self: Frame) !?Fragment {
         return switch (self) {
-            .Unreliable => self.Unreliable.fragment,
-            .UnreliableSequenced => self.UnreliableSequenced.fragment,
-            .Reliable => self.Reliable.fragment,
-            .ReliableOrdered => self.ReliableOrdered.fragment,
+            inline else => |frame| frame.fragment,
         };
     }
 
     pub fn body(self: Frame) ![]const u8 {
         return switch (self) {
-            .Unreliable => self.Unreliable.body,
-            .UnreliableSequenced => self.UnreliableSequenced.body,
-            .Reliable => self.Reliable.body,
-            .ReliableOrdered => self.ReliableOrdered.body,
+            inline else => |frame| frame.body,
         };
     }
 
