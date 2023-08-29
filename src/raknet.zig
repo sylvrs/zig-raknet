@@ -43,7 +43,7 @@ pub const Server = struct {
         return .{
             .pong_data = if (options.pong_data) |pong_data| pong_data else "",
             // generate a random guid if none was provided
-            .guid = if (options.guid) |guid| guid else blk: {
+            .guid = options.guid orelse blk: {
                 var prng = std.rand.DefaultPrng.init(inner: {
                     var seed: u64 = undefined;
                     std.os.getrandom(std.mem.asBytes(&seed)) catch unreachable;
@@ -168,30 +168,56 @@ pub const Server = struct {
 pub const Client = struct {
     allocator: std.mem.Allocator,
     logger: Logger,
-    connected: bool = false,
-    verbose: bool = false,
-    socket: network.Socket = undefined,
+    /// The random GUID used to identify this client
+    guid: i64,
+    /// The socket that is used to send and receive packets
+    connected_socket: ?network.Socket = null,
 
     /// Initializes a new Client from the given options
-    pub fn init(options: struct { allocator: std.mem.Allocator, verbose: bool = false }) Client {
+    pub fn init(options: struct { allocator: std.mem.Allocator, guid: ?i64 = null, verbose: bool = false }) Client {
+        // ensure the network is initialized if we're on Windows
+        network.init() catch unreachable;
         return .{
             .allocator = options.allocator,
+            .guid = options.guid orelse blk: {
+                var prng = std.rand.DefaultPrng.init(inner: {
+                    var seed: u64 = undefined;
+                    std.os.getrandom(std.mem.asBytes(&seed)) catch unreachable;
+                    break :inner seed;
+                });
+                const rand = prng.random();
+                break :blk rand.int(i64);
+            },
             .logger = .{ .verbose = options.verbose },
         };
     }
 
-    /// Start client and listen for incoming connections
-    pub fn connect(self: *Client, address: network.EndPoint) !void {
-        _ = address;
-        _ = self;
+    pub fn deinit(_: *Client) void {
+        network.deinit();
+    }
+
+    /// Pings the specified address and returns the pong
+    pub fn ping(self: *Client, address: []const u8, port: u16, recv_buf: []u8) !UnconnectedMessage {
+        const socket = try network.connectToHost(self.allocator, address, port, .udp);
+        defer socket.close();
+        try self.sendUnconnectedMessage(socket, .{
+            .UnconnectedPing = .{
+                .client_guid = self.guid,
+                .magic = RakNetMagic,
+                .ping_time = std.time.milliTimestamp(),
+            },
+        });
+        const size = try socket.receive(recv_buf);
+        return try UnconnectedMessage.from(recv_buf[0..size]);
     }
 
     /// Sends an unconnected message to the specified receiver
-    pub fn sendUnconnectedMessage(self: *Server, receiver: network.EndPoint, msg: UnconnectedMessage) !void {
+    fn sendUnconnectedMessage(self: *Client, socket: network.Socket, msg: UnconnectedMessage) !void {
+        _ = self;
         var write_buffer = [_]u8{0} ** MaxMTUSize;
         var stream = std.io.fixedBufferStream(&write_buffer);
         var writer = stream.writer();
         try msg.encode(writer);
-        _ = try self.socket.sendTo(receiver, stream.getWritten());
+        _ = try socket.sendTo(socket.endpoint orelse return error.UnknownEndpoint, stream.getWritten());
     }
 };
