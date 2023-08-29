@@ -61,7 +61,7 @@ pub fn main() !void {
         // the data to be sent to clients when they ping the server
         .pong_data = "Hello, World!"
         // the address to start listening on
-        .address = .{
+        .endpoint = .{
             .address = .{ .ipv4 = try network.Address.IPv4.parse("0.0.0.0") },
             .port = 19132,
         },
@@ -71,6 +71,6 @@ pub fn main() !void {
     defer server.deinit();
     std.debug.print("Listening to data on {any}\n", .{server.address});
     // start the server and listen for incoming connections
-    try server.start();
+    try server.accept();
 }
 ```

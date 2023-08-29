@@ -19,6 +19,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+
     server_example.addModule("raknet", module);
     server_example.addModule("network", network_module);
     const server_artifact = b.addRunArtifact(server_example);

@@ -21,7 +21,7 @@ pub const Server = struct {
     /// The random GUID used to identify this server
     guid: i64,
     /// The address used to listen for incoming connections
-    address: network.EndPoint,
+    endpoint: network.EndPoint,
     /// The connections that are currently active
     connections: std.AutoHashMap(network.EndPoint, Connection),
     allocator: std.mem.Allocator,
@@ -37,7 +37,7 @@ pub const Server = struct {
         allocator: std.mem.Allocator,
         pong_data: ?[]const u8 = null,
         guid: ?i64 = null,
-        address: network.EndPoint,
+        endpoint: network.EndPoint,
         verbose: bool = false,
     }) Server {
         return .{
@@ -52,7 +52,7 @@ pub const Server = struct {
                 const rand = prng.random();
                 break :blk rand.int(i64);
             },
-            .address = options.address,
+            .endpoint = options.endpoint,
             .connections = std.AutoHashMap(network.EndPoint, Connection).init(options.allocator),
             .allocator = options.allocator,
             .logger = .{ .verbose = options.verbose },
@@ -65,16 +65,16 @@ pub const Server = struct {
     }
 
     /// Start server and listen for incoming connections
-    pub fn start(self: *Server) !void {
+    pub fn accept(self: *Server) !void {
         // create UDP socket on IPv4
         self.socket = try network.Socket.create(.ipv4, .udp);
         defer self.socket.close();
         // configure socket
         try self.socket.setBroadcast(true);
         // start listening
-        try self.socket.bind(self.address);
+        try self.socket.bind(self.endpoint);
         // start accepting connections
-        self.logger.info("Listening on {any}", .{self.address});
+        self.logger.info("Listening on {any}", .{self.endpoint});
         while (self.running) {
             self.receive() catch |err| {
                 self.logger.err("Error while receiving packet: {any}", .{err});
@@ -221,3 +221,14 @@ pub const Client = struct {
         _ = try socket.sendTo(socket.endpoint orelse return error.UnknownEndpoint, stream.getWritten());
     }
 };
+
+test "ensure client properly receives message" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    var client = Client.init(.{ .allocator = gpa.allocator(), .verbose = true });
+    defer client.deinit();
+    var recv_buf: [1024]u8 = undefined;
+    const msg = try client.ping("play.nethergames.org", 19132, &recv_buf);
+    try std.testing.expect(msg == .UnconnectedPong);
+    try std.testing.expectStringStartsWith(msg.UnconnectedPong.server_pong_data, "MCPE");
+}
