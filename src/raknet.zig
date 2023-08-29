@@ -16,31 +16,52 @@ pub const RakNetProtocolVersion = 11;
 pub const MaxMTUSize = 1500;
 
 pub const Server = struct {
-    name: []const u8,
+    /// The data that is sent in an UnconnectedPong
+    pong_data: []const u8,
+    /// The random GUID used to identify this server
     guid: i64,
+    /// The address used to listen for incoming connections
     address: network.EndPoint,
+    /// The connections that are currently active
     connections: std.AutoHashMap(network.EndPoint, Connection),
     allocator: std.mem.Allocator,
+    /// The logger used to print messages
     logger: Logger,
+    /// Whether or not the server is running
     running: bool = true,
+    /// The socket that is created when the server is started
     socket: network.Socket = undefined,
 
     /// Initializes a new Server from the given options
     pub fn init(options: struct {
         allocator: std.mem.Allocator,
-        name: []const u8,
-        guid: i64,
+        pong_data: ?[]const u8 = null,
+        guid: ?i64 = null,
         address: network.EndPoint,
         verbose: bool = false,
     }) Server {
         return .{
-            .name = options.name,
-            .guid = options.guid,
+            .pong_data = if (options.pong_data) |pong_data| pong_data else "",
+            // generate a random guid if none was provided
+            .guid = if (options.guid) |guid| guid else blk: {
+                var prng = std.rand.DefaultPrng.init(inner: {
+                    var seed: u64 = undefined;
+                    std.os.getrandom(std.mem.asBytes(&seed)) catch unreachable;
+                    break :inner seed;
+                });
+                const rand = prng.random();
+                break :blk rand.int(i64);
+            },
             .address = options.address,
             .connections = std.AutoHashMap(network.EndPoint, Connection).init(options.allocator),
             .allocator = options.allocator,
             .logger = .{ .verbose = options.verbose },
         };
+    }
+
+    /// Sets the data that is sent in an UnconnectedPong
+    pub fn setPongData(self: *Server, data: []const u8) void {
+        self.pong_data = data;
     }
 
     /// Start server and listen for incoming connections
@@ -94,7 +115,7 @@ pub const Server = struct {
                     UnconnectedMessage.createUnconnectedPong(
                         msg.ping_time,
                         self.guid,
-                        self.name,
+                        self.pong_data,
                     ),
                 );
             },
