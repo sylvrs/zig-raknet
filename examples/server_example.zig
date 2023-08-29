@@ -56,7 +56,7 @@ pub fn main() !void {
     defer _ = gpa.deinit();
     var server = raknet.Server.init(.{
         .allocator = gpa.allocator(),
-        .address = .{
+        .endpoint = .{
             .address = .{ .ipv4 = try network.Address.IPv4.parse("0.0.0.0") },
             .port = 19132,
         },
@@ -83,5 +83,5 @@ pub fn main() !void {
         };
         break :blk try server_format.toBufString(&server_name);
     });
-    try server.start();
+    try server.accept();
 }
