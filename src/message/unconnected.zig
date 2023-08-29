@@ -16,21 +16,21 @@ pub const UnconnectedMessageIds = enum(u8) {
 
 pub const UnconnectedMessage = union(UnconnectedMessageIds) {
     UnconnectedPing: struct { ping_time: i64, client_guid: i64 },
-    UnconnectedPong: struct { pong_time: i64, server_guid: i64, magic: @TypeOf(RakNetMagic), server_name: []const u8 },
+    UnconnectedPong: struct { pong_time: i64, server_guid: i64, magic: @TypeOf(RakNetMagic), server_pong_data: []const u8 },
     OpenConnectionRequest1: struct { magic: @TypeOf(RakNetMagic), protocol_version: u8, mtu_padding: []const u8 },
     OpenConnectionReply1: struct { magic: @TypeOf(RakNetMagic), server_guid: i64, use_security: bool, mtu_size: i16 },
     OpenConnectionRequest2: struct { magic: @TypeOf(RakNetMagic), server_address: network.EndPoint, mtu_size: i16, client_guid: i64 },
     OpenConnectionReply2: struct { magic: @TypeOf(RakNetMagic), server_guid: i64, client_address: network.EndPoint, mtu_size: i16, encryption_enabled: bool },
     IncompatibleProtocolVersion: struct { protocol: u8, magic: @TypeOf(RakNetMagic), server_guid: i64 },
 
-    /// Creates an UnconnectedPong struct given the current time, server GUID, and server name.
-    pub fn createUnconnectedPong(pong_time: i64, server_guid: i64, server_name: []const u8) UnconnectedMessage {
+    /// Creates an UnconnectedPong struct given the current time, server GUID, and the server's pong data.
+    pub fn createUnconnectedPong(pong_time: i64, server_guid: i64, server_pong_data: []const u8) UnconnectedMessage {
         return .{
             .UnconnectedPong = .{
                 .pong_time = pong_time,
                 .server_guid = server_guid,
                 .magic = RakNetMagic,
-                .server_name = server_name,
+                .server_pong_data = server_pong_data,
             },
         };
     }
@@ -113,7 +113,7 @@ pub const UnconnectedMessage = union(UnconnectedMessageIds) {
                 try writer.writeIntBig(i64, pong.pong_time);
                 try writer.writeIntBig(i64, pong.server_guid);
                 try writer.writeAll(RakNetMagic);
-                try helpers.writeString(writer, pong.server_name);
+                try helpers.writeString(writer, pong.server_pong_data);
             },
             .OpenConnectionReply1 => |reply1| {
                 try writer.writeAll(RakNetMagic);
@@ -138,8 +138,8 @@ pub const UnconnectedMessage = union(UnconnectedMessageIds) {
         switch (value) {
             .UnconnectedPing => |msg| try writer.print("UnconnectedPing {{ ping_time: {}, client_guid: {} }}", .{ msg.ping_time, msg.client_guid }),
             .UnconnectedPong => |msg| try writer.print(
-                "UnconnectedPong {{ pong_time: {}, server_guid: {}, server_name: {s} }}",
-                .{ msg.pong_time, msg.server_guid, msg.server_name },
+                "UnconnectedPong {{ pong_time: {}, server_guid: {}, server_pong_data: {s} }}",
+                .{ msg.pong_time, msg.server_guid, msg.server_pong_data },
             ),
             .OpenConnectionRequest1 => |msg| try writer.print(
                 "OpenConnectionRequest1 {{ protocol_version: {}, mtu_size: {} }}",
