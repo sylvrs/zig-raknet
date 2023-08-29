@@ -47,20 +47,27 @@ pub fn build(b: *std.Build) void {
 
 Example usage of the library can be found in the `examples` directory. Here is what a simple server looks like:
 
-```js
+```zig
 const raknet = @import("raknet");
 const network = @import("network");
 const std = @import("std");
 
 pub fn main() !void {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     // create a server
-    var server = try raknet.Server.init(
-        std.heap.page_allocator,
-        .{
-            .address = .{ .ipv4 = try network.Address.IPv4.parse("127.0.0.1") },
+    var server = raknet.Server.init(.{
+        // the allocator to use for the server
+        .allocator = gpa.allocator(),
+        // the data to be sent to clients when they ping the server
+        .pong_data = "Hello, World!"
+        // the address to start listening on
+        .address = .{
+            .address = .{ .ipv4 = try network.Address.IPv4.parse("0.0.0.0") },
             .port = 19132,
         },
-    );
+        // whether to print messages from the server into stderr
+        .verbose = true,
+    });
     defer server.deinit();
     std.debug.print("Listening to data on {any}\n", .{server.address});
     // start the server and listen for incoming connections

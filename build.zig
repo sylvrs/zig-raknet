@@ -13,17 +13,29 @@ pub fn build(b: *std.Build) void {
         },
     });
 
-    const example_exe = b.addExecutable(.{
-        .name = "raknet_example",
-        .root_source_file = .{ .path = "examples/example.zig" },
+    const server_example = b.addExecutable(.{
+        .name = "server_example",
+        .root_source_file = .{ .path = "examples/server_example.zig" },
         .target = target,
         .optimize = optimize,
     });
-    example_exe.addModule("raknet", module);
-    example_exe.addModule("network", network_module);
-    const artifact = b.addRunArtifact(example_exe);
-    const executable_step = b.step("example", "Runs the main example");
-    executable_step.dependOn(&artifact.step);
+    server_example.addModule("raknet", module);
+    server_example.addModule("network", network_module);
+    const server_artifact = b.addRunArtifact(server_example);
+    const server_step = b.step("server_example", "Runs the server example");
+    server_step.dependOn(&server_artifact.step);
+
+    const client_example = b.addExecutable(.{
+        .name = "server_example",
+        .root_source_file = .{ .path = "examples/client_example.zig" },
+        .target = target,
+        .optimize = optimize,
+    });
+    client_example.addModule("raknet", module);
+    client_example.addModule("network", network_module);
+    const client_artifact = b.addRunArtifact(client_example);
+    const client_step = b.step("client_example", "Runs the server example");
+    client_step.dependOn(&client_artifact.step);
 
     const main_tests = b.addTest(.{
         .root_source_file = .{ .path = "src/tests.zig" },
