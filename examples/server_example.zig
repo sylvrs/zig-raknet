@@ -17,7 +17,7 @@ pub const ServerNameFormat = struct {
     port_ipv4: u32,
     port_ipv6: u32,
 
-    pub fn toString(self: ServerNameFormat, buf: []u8) ![]const u8 {
+    pub fn toBufString(self: ServerNameFormat, buf: []u8) ![]const u8 {
         return try std.fmt.bufPrint(buf, "{s};{s};{d};{s};{d};{d};{d};{s};{s};{d};{d};{d};", .{
             switch (self.header) {
                 .mcpe => "MCPE",
@@ -54,42 +54,34 @@ pub fn customLogFn(comptime level: std.log.Level, comptime _: @TypeOf(.EnumLiter
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
-    var prng = std.rand.DefaultPrng.init(blk: {
-        var seed: u64 = undefined;
-        try std.os.getrandom(std.mem.asBytes(&seed));
-        break :blk seed;
-    });
-    const rand = prng.random();
-    // create a server
-    var guid = rand.int(i64);
-    // server name format
-    const server_format = ServerNameFormat{
-        .header = .mcpe,
-        .motd = "Hello from Zig!",
-        .protocol_version = 575,
-        .game_version = "1.20.19",
-        .player_count = 0,
-        .max_player_count = 20,
-        .server_guid = guid,
-        .sub_motd = "Zig-RakNet",
-        .gamemode = "Creative",
-        .gamemode_numeric = 1,
-        .port_ipv4 = 19132,
-        .port_ipv6 = 19132,
-    };
-    // create buffer to store server name in
-    var server_name_buf: [1024]u8 = undefined;
-    // format server name using buffer
-    var server_name = try server_format.toString(&server_name_buf);
     var server = raknet.Server.init(.{
         .allocator = gpa.allocator(),
-        .name = server_name,
-        .guid = guid,
         .address = .{
             .address = .{ .ipv4 = try network.Address.IPv4.parse("0.0.0.0") },
             .port = 19132,
         },
         .verbose = true,
+    });
+
+    // set pong data
+    server.setPongData(blk: {
+        var server_name: [1024]u8 = undefined;
+        // server name format
+        const server_format = ServerNameFormat{
+            .header = .mcpe,
+            .motd = "Hello from Zig!",
+            .protocol_version = 575,
+            .game_version = "1.20.19",
+            .player_count = 0,
+            .max_player_count = 20,
+            .server_guid = server.guid,
+            .sub_motd = "Zig-RakNet",
+            .gamemode = "Creative",
+            .gamemode_numeric = 1,
+            .port_ipv4 = 19132,
+            .port_ipv6 = 19132,
+        };
+        break :blk try server_format.toBufString(&server_name);
     });
     try server.start();
 }
