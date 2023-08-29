@@ -15,7 +15,7 @@ pub const UnconnectedMessageIds = enum(u8) {
 };
 
 pub const UnconnectedMessage = union(UnconnectedMessageIds) {
-    UnconnectedPing: struct { ping_time: i64, client_guid: i64 },
+    UnconnectedPing: struct { ping_time: i64, magic: @TypeOf(RakNetMagic), client_guid: i64 },
     UnconnectedPong: struct { pong_time: i64, server_guid: i64, magic: @TypeOf(RakNetMagic), server_pong_data: []const u8 },
     OpenConnectionRequest1: struct { magic: @TypeOf(RakNetMagic), protocol_version: u8, mtu_padding: []const u8 },
     OpenConnectionReply1: struct { magic: @TypeOf(RakNetMagic), server_guid: i64, use_security: bool, mtu_size: i16 },
@@ -73,7 +73,26 @@ pub const UnconnectedMessage = union(UnconnectedMessageIds) {
                 const ping_time = try reader.readIntBig(i64);
                 try helpers.verifyMagic(reader);
                 const client_guid = try reader.readIntBig(i64);
-                return .{ .UnconnectedPing = .{ .ping_time = ping_time, .client_guid = client_guid } };
+                return .{ .UnconnectedPing = .{ .ping_time = ping_time, .magic = RakNetMagic, .client_guid = client_guid } };
+            },
+            .UnconnectedPong => {
+                const pong_time = try reader.readIntBig(i64);
+                const server_guid = try reader.readIntBig(i64);
+                try helpers.verifyMagic(reader);
+                const length = try reader.readIntBig(u16);
+                // store the current index for slicing
+                const start = try stream.getPos();
+                try reader.skipBytes(length, .{});
+                // slice the buffer from the start to the current index
+                const pong_data = stream.buffer[start..try stream.getPos()];
+                return .{
+                    .UnconnectedPong = .{
+                        .pong_time = pong_time,
+                        .server_guid = server_guid,
+                        .magic = RakNetMagic,
+                        .server_pong_data = pong_data,
+                    },
+                };
             },
             .OpenConnectionRequest1 => {
                 try helpers.verifyMagic(reader);
@@ -102,13 +121,18 @@ pub const UnconnectedMessage = union(UnconnectedMessageIds) {
                     },
                 };
             },
-            else => error.UnsupportedOfflineMessageId,
+            else => error.UnsupportedMessageDecode,
         };
     }
 
     pub fn encode(self: UnconnectedMessage, writer: anytype) !void {
         try writer.writeByte(@intFromEnum(self));
         return switch (self) {
+            .UnconnectedPing => |ping| {
+                try writer.writeIntBig(i64, ping.ping_time);
+                try writer.writeAll(RakNetMagic);
+                try writer.writeIntBig(i64, ping.client_guid);
+            },
             .UnconnectedPong => |pong| {
                 try writer.writeIntBig(i64, pong.pong_time);
                 try writer.writeIntBig(i64, pong.server_guid);
@@ -128,7 +152,7 @@ pub const UnconnectedMessage = union(UnconnectedMessageIds) {
                 try writer.writeIntBig(i16, reply2.mtu_size);
                 try writer.writeByte(@intFromBool(reply2.encryption_enabled));
             },
-            else => error.UnsupportedOfflineMessageId,
+            else => error.UnsupportedMessageEncode,
         };
     }
 

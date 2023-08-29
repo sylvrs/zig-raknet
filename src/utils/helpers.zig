@@ -19,7 +19,13 @@ pub fn readStringBuffer(reader: anytype, buffer: []u8) !usize {
     return length;
 }
 
-/// Verifies that the magic bytes read from the current position of the reader match the expected magic bytes.
+/// Reads a string from the reader into a buffer allocated using the allocator.
+pub fn readStringAlloc(reader: anytype, allocator: std.mem.Allocator) ![]u8 {
+    const length = try reader.readIntBig(u16);
+    return try reader.readAllAlloc(allocator, length);
+}
+
+/// Reads and verifies that the magic bytes read from the current position of the reader match the expected magic bytes.
 pub fn verifyMagic(reader: anytype) RakNetError!void {
     const received_magic = try reader.readBoundedBytes(RakNetMagic.len);
     if (!std.mem.eql(u8, RakNetMagic, received_magic.buffer[0..received_magic.len])) {

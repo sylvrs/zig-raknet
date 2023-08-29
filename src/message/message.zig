@@ -27,7 +27,7 @@ pub const DataMessage = union(enum) {
         switch (value) {
             .Ack => try writer.print("Ack {{ }}", .{}),
             .Nack => try writer.print("Nack {{ }}", .{}),
-            .Datagram => try writer.print("Datagram {{ flags: {}, sequence_number: {}, frame_count: {} }}", .{ value.Datagram.flags, value.Datagram.sequence_number, value.Datagram.frames.len }),
+            .Datagram => |msg| try writer.print("Datagram {{ flags: {}, sequence_number: {}, frame_count: {} }}", .{ msg.flags, msg.sequence_number, msg.frames.len }),
         }
     }
 
