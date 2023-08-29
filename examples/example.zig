@@ -81,15 +81,15 @@ pub fn main() !void {
     var server_name_buf: [1024]u8 = undefined;
     // format server name using buffer
     var server_name = try server_format.toString(&server_name_buf);
-    var server = try raknet.Server.init(
-        gpa.allocator(),
-        server_name,
-        guid,
-        .{
+    var server = raknet.Server.init(.{
+        .allocator = gpa.allocator(),
+        .name = server_name,
+        .guid = guid,
+        .address = .{
             .address = .{ .ipv4 = try network.Address.IPv4.parse("0.0.0.0") },
             .port = 19132,
         },
-    );
-    server.verbose = true;
+        .verbose = true,
+    });
     try server.start();
 }

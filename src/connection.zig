@@ -1,6 +1,6 @@
 const std = @import("std");
 const network = @import("network");
-const message = @import("message.zig");
+const DataMessage = @import("message/message.zig").DataMessage;
 const raknet = @import("raknet.zig");
 
 const Self = @This();
@@ -19,8 +19,8 @@ client_guid: i64,
 latency: u64 = 0,
 state: State = .Initializing,
 
-pub fn handleMessage(self: *Self, msg: message.DataMessage) !void {
-    self.server.logInfo("[Self: {}]: Received message: {}", .{ self.address, msg });
+pub fn handleMessage(self: *Self, msg: DataMessage) !void {
+    self.server.logger.info("[Connection: {}]: Received message: {}", .{ self.address, msg });
 }
 
 pub fn sendMessage(self: *Self, msg: []const u8) !void {
