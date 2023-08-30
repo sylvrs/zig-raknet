@@ -54,6 +54,11 @@ pub fn customLogFn(comptime level: std.log.Level, comptime _: @TypeOf(.EnumLiter
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
+
+    // initialize networking (required for Windows)
+    try raknet.init();
+    defer raknet.deinit();
+
     var server = raknet.Server.init(.{
         .allocator = gpa.allocator(),
         .endpoint = .{

@@ -3,6 +3,10 @@ const network = @import("network");
 const raknet = @import("raknet");
 
 pub fn main() !void {
+    // initialize networking (required for Windows)
+    try raknet.init();
+    defer raknet.deinit();
+
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     var client = raknet.Client.init(.{ .allocator = gpa.allocator(), .verbose = true });
