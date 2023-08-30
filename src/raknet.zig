@@ -110,7 +110,7 @@ pub const Server = struct {
         switch (received_message) {
             .unconnected_ping => |msg| {
                 // send pong back
-                try self.sendUnconnectedMessage(
+                try self.sendMessage(
                     sender,
                     UnconnectedMessage.createUnconnectedPong(
                         msg.ping_time,
@@ -119,9 +119,14 @@ pub const Server = struct {
                     ),
                 );
             },
-            .open_connection_request1 => {
+            .open_connection_request1 => |msg| {
                 self.logger.info("Received OpenConnectionRequest1 from {s}: {any}", .{ sender, received_message });
-                try self.sendUnconnectedMessage(
+                if (msg.protocol_version != RakNetProtocolVersion) {
+                    self.logger.warn("Received OpenConnectionRequest1 with invalid protocol version from {s}", .{sender});
+                    try self.sendMessage(sender, UnconnectedMessage.createIncompatibleProtocolVersion(RakNetProtocolVersion, self.guid));
+                    return;
+                }
+                try self.sendMessage(
                     sender,
                     UnconnectedMessage.createOpenConnectionReply1(
                         self.guid,
@@ -132,7 +137,7 @@ pub const Server = struct {
             },
             .open_connection_request2 => |msg| {
                 self.logger.info("Received OpenConnectionRequest2 from {s}: {any}", .{ sender, received_message });
-                try self.sendUnconnectedMessage(
+                try self.sendMessage(
                     sender,
                     UnconnectedMessage.createOpenConnectionReply2(
                         self.guid,
@@ -156,7 +161,7 @@ pub const Server = struct {
     }
 
     /// Sends an unconnected message to the specified receiver
-    pub fn sendUnconnectedMessage(self: *Server, receiver: network.EndPoint, msg: UnconnectedMessage) !void {
+    pub fn sendMessage(self: *Server, receiver: network.EndPoint, msg: UnconnectedMessage) !void {
         var write_buffer = [_]u8{0} ** MaxMTUSize;
         var stream = std.io.fixedBufferStream(&write_buffer);
         var writer = stream.writer();

@@ -88,6 +88,17 @@ pub const UnconnectedMessage = union(UnconnectedMessageIds) {
         };
     }
 
+    /// Creates an Incompatible Protocol Version packet given the protocol version and server GUID.
+    pub fn createIncompatibleProtocolVersion(protocol_version: u8, server_guid: i64) UnconnectedMessage {
+        return .{
+            .incompatible_protocol_version = .{
+                .protocol = protocol_version,
+                .magic = RakNetMagic,
+                .server_guid = server_guid,
+            },
+        };
+    }
+
     /// Attempts to construct an OfflineMessage from a packet ID & reader.
     pub fn from(raw: []const u8) !UnconnectedMessage {
         // initialize buffer & reader
@@ -128,6 +139,13 @@ pub const UnconnectedMessage = union(UnconnectedMessageIds) {
                 }
                 return createOpenConnectionRequest1(protocol_version, stream.buffer[start..end]);
             },
+            .open_connection_reply1 => {
+                try helpers.verifyMagic(reader);
+                const server_guid = try reader.readIntBig(i64);
+                const use_security = try reader.readByte() == 1;
+                const mtu_size = try reader.readIntBig(i16);
+                return createOpenConnectionReply1(server_guid, use_security, mtu_size);
+            },
             .open_connection_request2 => {
                 try helpers.verifyMagic(reader);
                 const server_address = try helpers.readAddress(reader);
@@ -135,7 +153,20 @@ pub const UnconnectedMessage = union(UnconnectedMessageIds) {
                 const client_guid = try reader.readIntBig(i64);
                 return createOpenConnectionRequest2(server_address, mtu_size, client_guid);
             },
-            else => error.UnsupportedMessageDecode,
+            .open_connection_reply2 => {
+                try helpers.verifyMagic(reader);
+                const server_guid = try reader.readIntBig(i64);
+                const client_address = try helpers.readAddress(reader);
+                const mtu_size = try reader.readIntBig(i16);
+                const encryption_enabled = try reader.readByte() == 1;
+                return createOpenConnectionReply2(server_guid, client_address, mtu_size, encryption_enabled);
+            },
+            .incompatible_protocol_version => {
+                const protocol_version = try reader.readByte();
+                try helpers.verifyMagic(reader);
+                const server_guid = try reader.readIntBig(i64);
+                return createIncompatibleProtocolVersion(protocol_version, server_guid);
+            },
         };
     }
 
@@ -153,11 +184,22 @@ pub const UnconnectedMessage = union(UnconnectedMessageIds) {
                 try writer.writeAll(RakNetMagic);
                 try helpers.writeString(writer, pong.server_pong_data);
             },
+            .open_connection_request1 => |request1| {
+                try writer.writeAll(RakNetMagic);
+                try writer.writeByte(request1.protocol_version);
+                try writer.writeAll(request1.mtu_padding);
+            },
             .open_connection_reply1 => |reply1| {
                 try writer.writeAll(RakNetMagic);
                 try writer.writeIntBig(i64, reply1.server_guid);
                 try writer.writeByte(@intFromBool(reply1.use_security));
                 try writer.writeIntBig(i16, reply1.mtu_size);
+            },
+            .open_connection_request2 => |request2| {
+                try writer.writeAll(RakNetMagic);
+                try helpers.writeAddress(writer, request2.server_address);
+                try writer.writeIntBig(i16, request2.mtu_size);
+                try writer.writeIntBig(i64, request2.client_guid);
             },
             .open_connection_reply2 => |reply2| {
                 try writer.writeAll(RakNetMagic);
@@ -166,7 +208,11 @@ pub const UnconnectedMessage = union(UnconnectedMessageIds) {
                 try writer.writeIntBig(i16, reply2.mtu_size);
                 try writer.writeByte(@intFromBool(reply2.encryption_enabled));
             },
-            else => error.UnsupportedMessageEncode,
+            .incompatible_protocol_version => |incompatible| {
+                try writer.writeByte(incompatible.protocol);
+                try writer.writeAll(RakNetMagic);
+                try writer.writeIntBig(i64, incompatible.server_guid);
+            },
         };
     }
 
