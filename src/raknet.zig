@@ -16,7 +16,7 @@ pub const RakNetProtocolVersion = 11;
 pub const MaxMTUSize = 1500;
 
 pub const Server = struct {
-    /// The data that is sent in an UnconnectedPong
+    /// The data that is sent in an unconnected pong
     pong_data: []const u8,
     /// The random GUID used to identify this server
     guid: i64,
@@ -59,7 +59,7 @@ pub const Server = struct {
         };
     }
 
-    /// Sets the data that is sent in an UnconnectedPong
+    /// Sets the data that is sent in an unconnected pong
     pub fn setPongData(self: *Server, data: []const u8) void {
         self.pong_data = data;
     }
@@ -85,7 +85,7 @@ pub const Server = struct {
     /// The main loop for receiving and processing packets
     pub fn receive(self: *Server) !void {
         var buffer = [_]u8{0} ** MaxMTUSize;
-        const details = try self.socket.receiveFrom(buffer[0..]);
+        const details = try self.socket.receiveFrom(&buffer);
         const raw = buffer[0..details.numberOfBytes];
         var associated_connection = self.connections.get(details.sender);
         // if we don't have a connection, attempt to handle it as an offline message
@@ -108,7 +108,7 @@ pub const Server = struct {
     /// Handles a decoded, unconnected message
     fn handleUnconnectedMessage(self: *Server, sender: network.EndPoint, received_message: UnconnectedMessage) !void {
         switch (received_message) {
-            .UnconnectedPing => |msg| {
+            .unconnected_ping => |msg| {
                 // send pong back
                 try self.sendUnconnectedMessage(
                     sender,
@@ -119,25 +119,25 @@ pub const Server = struct {
                     ),
                 );
             },
-            .OpenConnectionRequest1 => {
-                self.logger.info("Received OpenConnectionRequest1 from {s}: {any}", .{ sender, received_message });
+            .open_connection_request1 => {
+                self.logger.info("Received open_connection_request1 from {s}: {any}", .{ sender, received_message });
                 try self.sendUnconnectedMessage(
                     sender,
                     UnconnectedMessage.createOpenConnectionReply1(
                         self.guid,
                         false,
-                        @intCast(received_message.OpenConnectionRequest1.mtu_padding.len),
+                        @intCast(received_message.open_connection_request1.mtu_padding.len),
                     ),
                 );
             },
-            .OpenConnectionRequest2 => |msg| {
-                self.logger.info("Received OpenConnectionRequest2 from {s}: {any}", .{ sender, received_message });
+            .open_connection_request2 => |msg| {
+                self.logger.info("Received open_connection_request2 from {s}: {any}", .{ sender, received_message });
                 try self.sendUnconnectedMessage(
                     sender,
                     UnconnectedMessage.createOpenConnectionReply2(
                         self.guid,
                         sender,
-                        received_message.OpenConnectionRequest2.mtu_size,
+                        received_message.open_connection_request2.mtu_size,
                         false,
                     ),
                 );
@@ -200,20 +200,16 @@ pub const Client = struct {
     pub fn ping(self: *Client, address: []const u8, port: u16, recv_buf: []u8) !UnconnectedMessage {
         const socket = try network.connectToHost(self.allocator, address, port, .udp);
         defer socket.close();
-        try self.sendUnconnectedMessage(socket, .{
-            .UnconnectedPing = .{
-                .client_guid = self.guid,
-                .magic = RakNetMagic,
-                .ping_time = std.time.milliTimestamp(),
-            },
-        });
+        try sendUnconnectedMessage(socket, UnconnectedMessage.createUnconnectedPing(
+            std.time.milliTimestamp(),
+            self.guid,
+        ));
         const size = try socket.receive(recv_buf);
         return try UnconnectedMessage.from(recv_buf[0..size]);
     }
 
     /// Sends an unconnected message to the specified receiver
-    fn sendUnconnectedMessage(self: *Client, socket: network.Socket, msg: UnconnectedMessage) !void {
-        _ = self;
+    fn sendUnconnectedMessage(socket: network.Socket, msg: UnconnectedMessage) !void {
         var write_buffer = [_]u8{0} ** MaxMTUSize;
         var stream = std.io.fixedBufferStream(&write_buffer);
         var writer = stream.writer();
@@ -223,12 +219,10 @@ pub const Client = struct {
 };
 
 test "ensure client properly receives message" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    var client = Client.init(.{ .allocator = gpa.allocator(), .verbose = true });
+    var client = Client.init(.{ .allocator = std.testing.allocator, .verbose = true });
     defer client.deinit();
-    var recv_buf: [1024]u8 = undefined;
+    var recv_buf = [_]u8{0} ** MaxMTUSize;
     const msg = try client.ping("play.nethergames.org", 19132, &recv_buf);
-    try std.testing.expect(msg == .UnconnectedPong);
-    try std.testing.expectStringStartsWith(msg.UnconnectedPong.server_pong_data, "MCPE");
+    try std.testing.expect(msg == .unconnected_pong);
+    try std.testing.expectStringStartsWith(msg.unconnected_pong.server_pong_data, "MCPE");
 }
