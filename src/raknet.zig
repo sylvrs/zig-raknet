@@ -165,6 +165,16 @@ pub const Server = struct {
     }
 };
 
+/// A wrapper function for zig-network's initialization (only needed on Windows)
+pub fn init() !void {
+    try network.init();
+}
+
+/// A wrapper function for zig-network's deinitialization (only needed on Windows)
+pub fn deinit() void {
+    network.deinit();
+}
+
 pub const Client = struct {
     allocator: std.mem.Allocator,
     logger: Logger,
@@ -175,8 +185,6 @@ pub const Client = struct {
 
     /// Initializes a new Client from the given options
     pub fn init(options: struct { allocator: std.mem.Allocator, guid: ?i64 = null, verbose: bool = false }) Client {
-        // ensure the network is initialized if we're on Windows
-        network.init() catch unreachable;
         return .{
             .allocator = options.allocator,
             .guid = options.guid orelse blk: {
@@ -192,9 +200,7 @@ pub const Client = struct {
         };
     }
 
-    pub fn deinit(_: *Client) void {
-        network.deinit();
-    }
+    pub fn deinit(_: *Client) void {}
 
     /// Pings the specified address and returns the pong
     pub fn ping(self: *Client, address: []const u8, port: u16, recv_buf: []u8) !UnconnectedMessage {
@@ -219,6 +225,9 @@ pub const Client = struct {
 };
 
 test "ensure client properly receives message" {
+    try init();
+    defer deinit();
+
     var client = Client.init(.{ .allocator = std.testing.allocator, .verbose = true });
     defer client.deinit();
     var recv_buf = [_]u8{0} ** MaxMTUSize;
