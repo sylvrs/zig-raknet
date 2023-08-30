@@ -120,7 +120,7 @@ pub const Server = struct {
                 );
             },
             .open_connection_request1 => {
-                self.logger.info("Received open_connection_request1 from {s}: {any}", .{ sender, received_message });
+                self.logger.info("Received OpenConnectionRequest1 from {s}: {any}", .{ sender, received_message });
                 try self.sendUnconnectedMessage(
                     sender,
                     UnconnectedMessage.createOpenConnectionReply1(
@@ -131,7 +131,7 @@ pub const Server = struct {
                 );
             },
             .open_connection_request2 => |msg| {
-                self.logger.info("Received open_connection_request2 from {s}: {any}", .{ sender, received_message });
+                self.logger.info("Received OpenConnectionRequest2 from {s}: {any}", .{ sender, received_message });
                 try self.sendUnconnectedMessage(
                     sender,
                     UnconnectedMessage.createOpenConnectionReply2(
