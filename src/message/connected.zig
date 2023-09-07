@@ -27,8 +27,10 @@ pub const ConnectedMessage = union(ConnectedMessageIds) {
         var stream = std.io.fixedBufferStream(raw);
         const reader = stream.reader();
         return switch (try std.meta.intToEnum(ConnectedMessageIds, try reader.readByte())) {
-            .ConnectedPing => @panic("ConnectedPing is not implemented"),
-            .ConnectedPong => @panic("ConnectedPong is not implemented"),
+            .ConnectedPing => .{ .ConnectedPing = .{ .ping_time = try reader.readIntBig(i64) } },
+            .ConnectedPong => .{
+                .ConnectedPong = .{ .ping_time = try reader.readIntBig(i64), .pong_time = try reader.readIntBig(i64) },
+            },
             .ConnectionRequest => @panic("ConnectionRequest is not implemented"),
             .ConnectionRequestAccepted => @panic("ConnectionRequestAccepted is not implemented"),
             .NewIncomingConnection => @panic("NewIncomingConnection is not implemented"),
