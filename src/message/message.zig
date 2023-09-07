@@ -1,6 +1,6 @@
 const std = @import("std");
-const frame = @import("frame.zig");
-
+pub const Frame = @import("frame.zig").Frame;
+pub const AcknowledgeList = @import("AcknowledgeList.zig");
 pub const UnconnectedMessage = @import("unconnected.zig").UnconnectedMessage;
 pub const ConnectedMessage = @import("connected.zig").ConnectedMessage;
 
@@ -8,55 +8,65 @@ pub const ConnectedMessage = @import("connected.zig").ConnectedMessage;
 /// Each datagram must have the Datagram flag set.
 /// The Ack and Nack flags are mutually exclusive.
 pub const DataMessageFlags = enum(u8) {
-    Datagram = 0x80,
-    Ack = 0x40,
-    Nack = 0x20,
+    ack = 0x40,
+    nack = 0x20,
+    datagram = 0x80,
+
+    /// Resolves the header flags to an enum.
+    pub inline fn from(header_flags: u8) !DataMessageFlags {
+        // not a valid data message header
+        if (header_flags & DataMessageFlags.datagram.ordinal() == 0) {
+            return error.InvalidHeaderFlags;
+        }
+        if (header_flags & DataMessageFlags.ack.ordinal() != 0) {
+            return .ack;
+        } else if (header_flags & DataMessageFlags.nack.ordinal() != 0) {
+            return .nack;
+        } else {
+            return .datagram;
+        }
+    }
 
     /// Returns the flags as a byte.
     pub fn ordinal(self: DataMessageFlags) u8 {
         return @intFromEnum(self);
     }
 };
-pub const DataMessage = union(enum) {
-    Ack: struct {},
-    Nack: struct {},
-    Datagram: struct { flags: u8, sequence_number: u24, frames: []frame.Frame },
+
+pub const DataMessage = union(DataMessageFlags) {
+    ack: AcknowledgeList,
+    nack: AcknowledgeList,
+    datagram: struct { flags: u8, sequence_number: u24, frames: std.ArrayList(Frame) },
 
     /// Custom parser for DataMessage
     pub fn format(value: @This(), comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
         switch (value) {
-            .Ack => try writer.print("Ack {{ }}", .{}),
-            .Nack => try writer.print("Nack {{ }}", .{}),
-            .Datagram => |msg| try writer.print("Datagram {{ flags: {}, sequence_number: {}, frame_count: {} }}", .{ msg.flags, msg.sequence_number, msg.frames.len }),
+            .ack => try writer.print("Ack {{ }}", .{}),
+            .nack => try writer.print("Nack {{ }}", .{}),
+            .datagram => |msg| try writer.print("Datagram {{ flags: {}, sequence_number: {}, frame_count: {} }}", .{ msg.flags, msg.sequence_number, msg.frames.items.len }),
         }
     }
 
     /// Attempts to construct an DataMessage from a packet ID & reader.
+    /// The datagram's frames must be deallocated by the caller.
     pub fn from(allocator: std.mem.Allocator, raw: []const u8) !DataMessage {
         var stream = std.io.fixedBufferStream(raw);
         const reader = stream.reader();
-        const pid = try reader.readByte();
-        // if bitwise-and gives us 0, then it's not a valid Datagram
-        if (pid & DataMessageFlags.Datagram.ordinal() == 0) {
-            return error.InvalidOnlineMessageId;
-        }
-
-        if (pid & DataMessageFlags.Ack.ordinal() != 0) {
-            return .{ .Ack = .{} };
-        } else if (pid & DataMessageFlags.Nack.ordinal() != 0) {
-            return .{ .Nack = .{} };
-        } else {
-            // reset to the beginning of the packet
-            stream.reset();
-            const flags = try reader.readByte();
-            const sequence_number = try reader.readIntLittle(u24);
-            // we do not need to call deinit here because `toOwnedSlice` handles it for us
-            var frames = std.ArrayList(frame.Frame).init(allocator);
-            while (try stream.getPos() < try stream.getEndPos()) {
-                try frames.append(try frame.Frame.from(reader, allocator));
-            }
-            // todo: deallocate frames after use
-            return .{ .Datagram = .{ .flags = flags, .sequence_number = sequence_number, .frames = try frames.toOwnedSlice() } };
-        }
+        const header_flags = try reader.readByte();
+        return switch (try DataMessageFlags.from(header_flags)) {
+            .ack => .{ .ack = AcknowledgeList.from(allocator, raw) },
+            .nack => .{ .nack = AcknowledgeList.from(allocator, raw) },
+            .datagram => blk: {
+                // reset to the beginning of the packet
+                stream.reset();
+                const flags = try reader.readByte();
+                const sequence_number = try reader.readIntLittle(u24);
+                var frames = std.ArrayList(Frame).init(allocator);
+                while (try stream.getPos() < try stream.getEndPos()) {
+                    try frames.append(try Frame.from(reader, allocator));
+                }
+                break :blk .{ .datagram = .{ .flags = flags, .sequence_number = sequence_number, .frames = frames } };
+            },
+        };
     }
 };

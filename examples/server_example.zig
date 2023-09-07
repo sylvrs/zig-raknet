@@ -40,16 +40,13 @@ pub const ServerNameFormat = struct {
 
 // Define custom log configuration
 pub const std_options = struct {
-    pub const logFn = customLogFn;
+    pub fn logFn(comptime level: std.log.Level, comptime _: @TypeOf(.EnumLiteral), comptime format: []const u8, args: anytype) void {
+        std.debug.getStderrMutex().lock();
+        defer std.debug.getStderrMutex().unlock();
+        const stderr = std.io.getStdErr().writer();
+        nosuspend stderr.print("[" ++ comptime level.asText() ++ "] " ++ format ++ "\n", args) catch return;
+    }
 };
-
-pub fn customLogFn(comptime level: std.log.Level, comptime _: @TypeOf(.EnumLiteral), comptime format: []const u8, args: anytype) void {
-    // Print the message to stderr, silently ignoring any errors
-    std.debug.getStderrMutex().lock();
-    defer std.debug.getStderrMutex().unlock();
-    const stderr = std.io.getStdErr().writer();
-    nosuspend stderr.print("[" ++ comptime level.asText() ++ "] " ++ format ++ "\n", args) catch return;
-}
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};

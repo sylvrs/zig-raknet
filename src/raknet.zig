@@ -49,8 +49,7 @@ pub const Server = struct {
                     std.os.getrandom(std.mem.asBytes(&seed)) catch unreachable;
                     break :inner seed;
                 });
-                const rand = prng.random();
-                break :blk rand.int(i64);
+                break :blk prng.random().int(i64);
             },
             .endpoint = options.endpoint,
             .connections = std.AutoHashMap(network.EndPoint, Connection).init(options.allocator),
@@ -147,12 +146,13 @@ pub const Server = struct {
                     ),
                 );
                 // create connection
-                var new_connection = Connection{
+                var new_connection = Connection.init(.{
+                    .allocator = self.allocator,
                     .address = sender,
                     .server = self,
                     .mtu_size = msg.mtu_size,
                     .client_guid = msg.client_guid,
-                };
+                });
                 try self.connections.put(sender, new_connection);
                 self.logger.info("Created new connection for {s}", .{sender});
             },
@@ -160,7 +160,7 @@ pub const Server = struct {
         }
     }
 
-    /// Sends an unconnected message to the specified receiver
+    /// Sends a message to the specified receiver
     pub fn sendMessage(self: *Server, receiver: network.EndPoint, msg: UnconnectedMessage) !void {
         var write_buffer = [_]u8{0} ** MaxMTUSize;
         var stream = std.io.fixedBufferStream(&write_buffer);
@@ -169,16 +169,6 @@ pub const Server = struct {
         _ = try self.socket.sendTo(receiver, stream.getWritten());
     }
 };
-
-/// A wrapper function for zig-network's initialization (only needed on Windows)
-pub fn init() !void {
-    try network.init();
-}
-
-/// A wrapper function for zig-network's deinitialization (only needed on Windows)
-pub fn deinit() void {
-    network.deinit();
-}
 
 pub const Client = struct {
     allocator: std.mem.Allocator,
@@ -228,6 +218,16 @@ pub const Client = struct {
         _ = try socket.sendTo(socket.endpoint orelse return error.UnknownEndpoint, stream.getWritten());
     }
 };
+
+/// A wrapper function for zig-network's initialization (only needed on Windows)
+pub fn init() !void {
+    try network.init();
+}
+
+/// A wrapper function for zig-network's deinitialization (only needed on Windows)
+pub fn deinit() void {
+    network.deinit();
+}
 
 test "ensure client properly receives message" {
     try init();

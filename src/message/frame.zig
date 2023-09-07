@@ -2,18 +2,17 @@ const std = @import("std");
 
 pub const Order = struct { index: u24, channel: u8 };
 pub const Fragment = struct { count: u32, fragment_id: u16, index: u32 };
-pub const Reliability = enum(u8) {
-    const Self = @This();
-    Unreliable = 0,
-    UnreliableSequenced = 1,
-    Reliable = 2,
-    ReliableOrdered = 3,
-    ReliableSequenced = 4,
-    UnreliableWithAckReceipt = 5,
-    ReliableWithAckReceipt = 6,
-    ReliableOrderedWithAckReceipt = 7,
+pub const Reliability = enum(u3) {
+    unreliable = 0,
+    unreliable_sequenced = 1,
+    reliable = 2,
+    reliable_ordered = 3,
+    reliable_sequenced = 4,
+    unreliable_with_ack_receipt = 5,
+    reliable_with_ack_receipt = 6,
+    reliabled_ordered_with_ack_receipt = 7,
 
-    pub fn fromFlags(flags: u8) !Self {
+    pub fn fromFlags(flags: u8) !Reliability {
         return try std.meta.intToEnum(Reliability, flags >> 5);
     }
 };
@@ -21,68 +20,72 @@ pub const Reliability = enum(u8) {
 pub const Frame = union(enum) {
     const HasFragmentFlag = 0x10;
 
-    Unreliable: struct { fragment: ?Fragment, body: []const u8 },
-    UnreliableSequenced: struct { sequence_index: u24, fragment: ?Fragment, body: []const u8 },
-    Reliable: struct { message_index: u24, fragment: ?Fragment, body: []const u8 },
-    ReliableOrdered: struct { message_index: u24, order: Order, fragment: ?Fragment, body: []const u8 },
+    unreliable: struct { fragment: ?Fragment, body: []const u8 },
+    unreliable_sequenced: struct { sequence_index: u24, fragment: ?Fragment, body: []const u8 },
+    reliable: struct { message_index: u24, fragment: ?Fragment, body: []const u8 },
+    reliable_ordered: struct { message_index: u24, order: Order, fragment: ?Fragment, body: []const u8 },
 
     fn readFragmentFromFlags(flags: u8, reader: anytype) !?Fragment {
-        if (flags & HasFragmentFlag != 0) {
-            return .{
-                .count = try reader.readIntBig(u32),
-                .fragment_id = try reader.readIntBig(u16),
-                .index = try reader.readIntBig(u32),
-            };
-        } else {
+        if (flags & HasFragmentFlag == 0) {
             return null;
         }
+        return .{
+            .count = try reader.readIntBig(u32),
+            .fragment_id = try reader.readIntBig(u16),
+            .index = try reader.readIntBig(u32),
+        };
     }
 
-    pub fn fragment(self: Frame) !?Fragment {
+    pub fn fragment(self: *Frame) !?Fragment {
         return switch (self) {
             inline else => |frame| frame.fragment,
         };
     }
 
-    pub fn body(self: Frame) ![]const u8 {
+    pub fn body(self: *Frame) ![]const u8 {
         return switch (self) {
             inline else => |frame| frame.body,
         };
     }
 
-    pub fn readBuffer(reader: anytype, size: usize, allocator: std.mem.Allocator) ![]const u8 {
-        const allocated_buffer: []u8 = try allocator.alloc(u8, size);
+    fn readBuffer(reader: anytype, size: usize, allocator: std.mem.Allocator) ![]const u8 {
+        const allocated_buffer = try allocator.alloc(u8, size);
+        errdefer allocator.free(allocated_buffer);
         const bytes_read = try reader.readAll(allocated_buffer);
-        return allocated_buffer[0..bytes_read];
+        if (bytes_read != size) {
+            return error.ByteCountMismatch;
+        }
+        return allocated_buffer;
     }
 
     pub fn from(reader: anytype, allocator: std.mem.Allocator) !Frame {
         const flags = try reader.readByte();
-        const buffer_size = try reader.readIntBig(u16) + 7 << 3;
-        // make sure to free after use
+        // to get the size, we read two bytes, align it, and then shift right by 3
+        // this is equivalent to dividing by 8 and rounding up
+        const buffer_size = try reader.readIntBig(u16) + 7 >> 3;
         return switch (try Reliability.fromFlags(flags)) {
-            .Unreliable => {
-                return .{ .Unreliable = .{
+            .unreliable => .{
+                .unreliable = .{
                     .fragment = try readFragmentFromFlags(flags, reader),
                     .body = try readBuffer(reader, buffer_size, allocator),
-                } };
+                },
             },
-            .UnreliableSequenced => {
-                return .{ .UnreliableSequenced = .{
+            .unreliable_sequenced => .{
+                .unreliable_sequenced = .{
                     .sequence_index = try reader.readIntLittle(u24),
                     .fragment = try readFragmentFromFlags(flags, reader),
                     .body = try readBuffer(reader, buffer_size, allocator),
-                } };
+                },
             },
-            .Reliable => {
-                return .{ .Reliable = .{
+            .reliable => .{
+                .reliable = .{
                     .message_index = try reader.readIntLittle(u24),
                     .fragment = try readFragmentFromFlags(flags, reader),
                     .body = try readBuffer(reader, buffer_size, allocator),
-                } };
+                },
             },
-            .ReliableOrdered => {
-                return .{ .ReliableOrdered = .{
+            .reliable_ordered => .{
+                .reliable_ordered = .{
                     .message_index = try reader.readIntLittle(u24),
                     .order = .{
                         .index = try reader.readIntLittle(u24),
@@ -90,9 +93,41 @@ pub const Frame = union(enum) {
                     },
                     .fragment = try readFragmentFromFlags(flags, reader),
                     .body = try readBuffer(reader, buffer_size, allocator),
-                } };
+                },
             },
-            else => unreachable,
+            inline else => error.UnsupportedReliability,
         };
+    }
+};
+
+pub const FrameBuilder = struct {
+    /// The allocator used to store the frames
+    allocator: std.mem.Allocator,
+    /// The frames received
+    frames: std.ArrayList(Frame),
+    /// The frame count needed to complete the message
+    count: usize,
+
+    /// `init` initializes the builder with the given allocator and frame count
+    pub fn init(allocator: std.mem.Allocator, count: usize) !FrameBuilder {
+        return .{
+            .allocator = allocator,
+            .frames = try std.ArrayList(Frame).init(allocator),
+            .count = count,
+        };
+    }
+
+    /// `add` adds a frame to the builder
+    pub fn add(self: *FrameBuilder, frame: Frame) !?Frame {
+        try self.frames.add(frame);
+        if (self.frames.len == self.count) {
+            return self.build();
+        }
+        return null;
+    }
+
+    /// `isComplete` returns true if the frame builder has all the frames needed to build the message
+    pub fn isComplete(self: *FrameBuilder) bool {
+        return self.frames.len == self.count;
     }
 };
