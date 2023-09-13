@@ -36,18 +36,21 @@ pub const Frame = union(enum) {
         };
     }
 
-    pub fn fragment(self: *Frame) !?Fragment {
+    /// Returns the fragment information for the frame
+    pub fn fragment(self: Frame) ?Fragment {
         return switch (self) {
             inline else => |frame| frame.fragment,
         };
     }
 
-    pub fn body(self: *Frame) ![]const u8 {
+    /// Returns the body of the frame
+    pub fn body(self: Frame) []const u8 {
         return switch (self) {
             inline else => |frame| frame.body,
         };
     }
 
+    /// Attempts to read a buffer from the given reader
     fn readBuffer(reader: anytype, size: usize, allocator: std.mem.Allocator) ![]const u8 {
         const allocated_buffer = try allocator.alloc(u8, size);
         errdefer allocator.free(allocated_buffer);
@@ -58,6 +61,7 @@ pub const Frame = union(enum) {
         return allocated_buffer;
     }
 
+    /// Attempts to read a frame from the given reader
     pub fn from(reader: anytype, allocator: std.mem.Allocator) !Frame {
         const flags = try reader.readByte();
         // to get the size, we read two bytes, align it, and then shift right by 3
