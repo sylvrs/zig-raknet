@@ -33,6 +33,7 @@ pub const DataMessageFlags = enum(u8) {
     }
 };
 
+/// The three types of messages exchanged between a connected client and server.
 pub const DataMessage = union(DataMessageFlags) {
     ack: AcknowledgeList,
     nack: AcknowledgeList,
