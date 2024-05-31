@@ -61,7 +61,7 @@ pub const DataMessage = union(DataMessageFlags) {
                 // reset to the beginning of the packet
                 stream.reset();
                 const flags = try reader.readByte();
-                const sequence_number = try reader.readIntLittle(u24);
+                const sequence_number = try reader.readInt(u24, .little);
                 var frames = std.ArrayList(Frame).init(allocator);
                 while (try stream.getPos() < try stream.getEndPos()) {
                     try frames.append(try Frame.from(reader, allocator));

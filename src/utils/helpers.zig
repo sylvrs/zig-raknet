@@ -5,13 +5,13 @@ const RakNetMagic = @import("../raknet.zig").RakNetMagic;
 
 /// Writes a string to the writer.
 pub fn writeString(writer: anytype, value: []const u8) !void {
-    try writer.writeIntBig(u16, @intCast(value.len));
+    try writer.writeInt(u16, @intCast(value.len), .big);
     try writer.writeAll(value);
 }
 
 /// Reads a string from the reader into the buffer.
 pub fn readStringBuffer(reader: anytype, buffer: []u8) !usize {
-    const length = try reader.readIntBig(u16);
+    const length = try reader.readInt(u16, .big);
     const read_bytes = try reader.readAtLeast(buffer, length);
     if (read_bytes != length) {
         return error.MismatchedStringLength;
@@ -21,7 +21,7 @@ pub fn readStringBuffer(reader: anytype, buffer: []u8) !usize {
 
 /// Reads a string from the reader into a buffer allocated using the allocator.
 pub fn readStringAlloc(reader: anytype, allocator: std.mem.Allocator) ![]u8 {
-    const length = try reader.readIntBig(u16);
+    const length = try reader.readInt(u16, .big);
     return try reader.readAllAlloc(allocator, length);
 }
 
@@ -39,7 +39,7 @@ pub fn readAddress(reader: anytype) !network.EndPoint {
     return switch (address_family) {
         4 => {
             const bytes = try reader.readBoundedBytes(4);
-            const port = try reader.readIntBig(u16);
+            const port = try reader.readInt(u16, .big);
 
             return network.EndPoint{
                 .address = .{
@@ -50,13 +50,13 @@ pub fn readAddress(reader: anytype) !network.EndPoint {
         },
         6 => {
             // AF_INET6
-            _ = try reader.readIntLittle(i16);
-            const port = try reader.readIntBig(u16);
+            _ = try reader.readInt(i16, .little);
+            const port = try reader.readInt(u16, .big);
             // flow info
-            _ = try reader.readIntBig(u32);
+            _ = try reader.readInt(u32, .big);
             const bytes = try reader.readBoundedBytes(16);
             // scope id
-            const scope_id = try reader.readIntBig(u32);
+            const scope_id = try reader.readInt(u32, .big);
             return network.EndPoint{
                 .address = .{
                     .ipv6 = network.Address.IPv6.init(bytes.buffer[0..].*, scope_id),
@@ -74,18 +74,18 @@ pub fn writeAddress(writer: anytype, endpoint: network.EndPoint) !void {
         .ipv4 => |ipv4| {
             try writer.writeByte(4);
             try writer.writeAll(&ipv4.value);
-            try writer.writeIntBig(u16, endpoint.port);
+            try writer.writeInt(u16, endpoint.port, .big);
         },
         .ipv6 => |ipv6| {
             try writer.writeByte(6);
             // AF_INET6
-            try writer.writeIntLittle(i16, std.os.AF.INET6);
-            try writer.writeIntBig(i16, @as(i16, @intCast(endpoint.port)));
+            try writer.writeInt(i16, std.posix.AF.INET6, .little);
+            try writer.writeInt(i16, @as(i16, @intCast(endpoint.port)), .big);
             // flow info
-            try writer.writeIntBig(u32, 0);
+            try writer.writeInt(u32, 0, .big);
             try writer.writeAll(&ipv6.value);
             // scope id
-            try writer.writeIntBig(u32, ipv6.scope_id);
+            try writer.writeInt(u32, ipv6.scope_id, .big);
         },
     };
 }
@@ -95,7 +95,7 @@ test "write string correctly" {
     const expected = [_]u8{ 0x00, 0x0b, 0x74, 0x65, 0x73, 0x74, 0x20, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67 };
     // allocate a small buffer
     const allocator: std.mem.Allocator = std.testing.allocator;
-    var write_buffer = try allocator.alloc(u8, 1024);
+    const write_buffer = try allocator.alloc(u8, 1024);
     defer allocator.free(write_buffer);
     // create stream & writer
     var stream = std.io.fixedBufferStream(write_buffer);
@@ -150,7 +150,7 @@ test "correctly write IPv4 address" {
     const expected = [_]u8{ 4, 127, 0, 0, 1, 0x30, 0x39 };
     // allocate a small buffer
     const allocator: std.mem.Allocator = std.testing.allocator;
-    var write_buffer = try allocator.alloc(u8, 1024);
+    const write_buffer = try allocator.alloc(u8, 1024);
     defer allocator.free(write_buffer);
     // create stream & writer
     var stream = std.io.fixedBufferStream(write_buffer);
@@ -171,7 +171,7 @@ test "correctly read IPv6 address" {
         .port = 12345,
     };
     // create stream & reader
-    const read_buffer = [_]u8{ 0x06, std.os.AF.INET6, 0x00, 0x30, 0x39, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x00, 0x00, 0x00, 0x0a };
+    const read_buffer = [_]u8{ 0x06, std.posix.AF.INET6, 0x00, 0x30, 0x39, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x00, 0x00, 0x00, 0x0a };
     var stream = std.io.fixedBufferStream(&read_buffer);
     const reader = stream.reader();
     // read address
@@ -181,10 +181,10 @@ test "correctly read IPv6 address" {
 }
 
 test "correctly write IPv6 address" {
-    const expected = [_]u8{ 0x06, std.os.AF.INET6, 0x00, 0x30, 0x39, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x00, 0x00, 0x00, 0x0a };
+    const expected = [_]u8{ 0x06, std.posix.AF.INET6, 0x00, 0x30, 0x39, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x00, 0x00, 0x00, 0x0a };
     // allocate a small buffer
     const allocator: std.mem.Allocator = std.testing.allocator;
-    var write_buffer = try allocator.alloc(u8, 1024);
+    const write_buffer = try allocator.alloc(u8, 1024);
     defer allocator.free(write_buffer);
     // create stream & writer
     var stream = std.io.fixedBufferStream(write_buffer);

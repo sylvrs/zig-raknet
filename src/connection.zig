@@ -116,7 +116,7 @@ pub fn sendMessage(self: *Self, msg: ConnectedMessage) !void {
     }
     var write_buffer = [_]u8{0} ** raknet.MaxMTUSize;
     var stream = std.io.fixedBufferStream(&write_buffer);
-    var writer = stream.writer();
+    const writer = stream.writer();
     try msg.encode(writer);
     _ = try self.server.socket.sendTo(self.address, stream.getWritten());
 }

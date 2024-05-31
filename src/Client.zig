@@ -49,7 +49,7 @@ pub fn ping(self: *Self, address: []const u8, port: u16, recv_buf: []u8) !Unconn
 fn sendUnconnectedMessage(socket: network.Socket, msg: UnconnectedMessage) !void {
     var write_buffer = [_]u8{0} ** raknet.MaxMTUSize;
     var stream = std.io.fixedBufferStream(&write_buffer);
-    var writer = stream.writer();
+    const writer = stream.writer();
     try msg.encode(writer);
     _ = try socket.send(stream.getWritten());
 }

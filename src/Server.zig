@@ -138,7 +138,7 @@ fn handleUnconnectedMessage(self: *Self, sender: network.EndPoint, received_mess
                 ),
             );
             // create connection
-            var new_connection = Connection.init(.{
+            const new_connection = Connection.init(.{
                 .allocator = self.allocator,
                 .address = sender,
                 .server = self,
@@ -156,7 +156,7 @@ fn handleUnconnectedMessage(self: *Self, sender: network.EndPoint, received_mess
 pub fn sendUnconnectedMessage(self: *Self, receiver: network.EndPoint, msg: UnconnectedMessage) !void {
     var write_buffer = [_]u8{0} ** raknet.MaxMTUSize;
     var stream = std.io.fixedBufferStream(&write_buffer);
-    var writer = stream.writer();
+    const writer = stream.writer();
     try msg.encode(writer);
     _ = try self.socket.sendTo(receiver, stream.getWritten());
 }

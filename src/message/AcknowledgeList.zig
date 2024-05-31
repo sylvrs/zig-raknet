@@ -12,6 +12,6 @@ packets: std.ArrayList(u24),
 /// Decodes a buffer into an Acknowledge packet (This can be an ACK or NACK)
 pub fn from(allocator: std.mem.Allocator, raw: []const u8) Self {
     _ = raw;
-    var packets = std.ArrayList(u24).init(allocator);
+    const packets = std.ArrayList(u24).init(allocator);
     return Self{ .packets = packets };
 }

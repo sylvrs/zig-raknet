@@ -49,18 +49,18 @@ pub const ConnectedMessage = union(ConnectedMessageIds) {
         try writer.writeByte(@intFromEnum(self));
         return switch (self) {
             .connection_request => |msg| {
-                try writer.writeIntBig(i64, msg.client_guid);
-                try writer.writeIntBig(i64, msg.send_ping_time);
+                try writer.writeInt(i64, msg.client_guid, .big);
+                try writer.writeInt(i64, msg.send_ping_time, .big);
                 try writer.writeByte(if (msg.use_security) 1 else 0);
             },
             .connection_request_accepted => |msg| {
                 try helpers.writeAddress(writer, msg.client_address);
-                try writer.writeIntBig(i16, @intCast(0));
+                try writer.writeInt(i16, @intCast(0), .big);
                 for (msg.internal_ids) |address| {
                     try helpers.writeAddress(writer, address);
                 }
-                try writer.writeIntBig(i64, msg.send_ping_time);
-                try writer.writeIntBig(i64, msg.send_pong_time);
+                try writer.writeInt(i64, msg.send_ping_time, .big);
+                try writer.writeInt(i64, msg.send_pong_time, .big);
             },
             else => error.UnknownConnectedMessageId,
         };
