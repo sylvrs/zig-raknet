@@ -30,9 +30,9 @@ pub const Frame = union(enum) {
             return null;
         }
         return .{
-            .count = try reader.readIntBig(u32),
-            .fragment_id = try reader.readIntBig(u16),
-            .index = try reader.readIntBig(u32),
+            .count = try reader.readInt(u32, .big),
+            .fragment_id = try reader.readInt(u16, .big),
+            .index = try reader.readInt(u32, .big),
         };
     }
 
@@ -66,7 +66,7 @@ pub const Frame = union(enum) {
         const flags = try reader.readByte();
         // to get the size, we read two bytes, align it, and then shift right by 3
         // this is equivalent to dividing by 8 and rounding up
-        const buffer_size = try reader.readIntBig(u16) + 7 >> 3;
+        const buffer_size = try reader.readInt(u16, .big) + 7 >> 3;
         return switch (try Reliability.fromFlags(flags)) {
             .unreliable => .{
                 .unreliable = .{
@@ -76,23 +76,23 @@ pub const Frame = union(enum) {
             },
             .unreliable_sequenced => .{
                 .unreliable_sequenced = .{
-                    .sequence_index = try reader.readIntLittle(u24),
+                    .sequence_index = try reader.readInt(u24, .little),
                     .fragment = try readFragmentFromFlags(flags, reader),
                     .body = try readBuffer(reader, buffer_size, allocator),
                 },
             },
             .reliable => .{
                 .reliable = .{
-                    .message_index = try reader.readIntLittle(u24),
+                    .message_index = try reader.readInt(u24, .little),
                     .fragment = try readFragmentFromFlags(flags, reader),
                     .body = try readBuffer(reader, buffer_size, allocator),
                 },
             },
             .reliable_ordered => .{
                 .reliable_ordered = .{
-                    .message_index = try reader.readIntLittle(u24),
+                    .message_index = try reader.readInt(u24, .little),
                     .order = .{
-                        .index = try reader.readIntLittle(u24),
+                        .index = try reader.readInt(u24, .little),
                         .channel = try reader.readByte(),
                     },
                     .fragment = try readFragmentFromFlags(flags, reader),

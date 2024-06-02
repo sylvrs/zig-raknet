@@ -28,13 +28,13 @@ pub const ConnectedMessage = union(ConnectedMessageIds) {
         var stream = std.io.fixedBufferStream(raw);
         const reader = stream.reader();
         return switch (try std.meta.intToEnum(ConnectedMessageIds, try reader.readByte())) {
-            .connected_ping => .{ .connected_ping = .{ .ping_time = try reader.readIntBig(i64) } },
+            .connected_ping => .{ .connected_ping = .{ .ping_time = try reader.readInt(i64, .big) } },
             .connected_pong => .{
-                .connected_pong = .{ .ping_time = try reader.readIntBig(i64), .pong_time = try reader.readIntBig(i64) },
+                .connected_pong = .{ .ping_time = try reader.readInt(i64, .big), .pong_time = try reader.readInt(i64, .big) },
             },
             .connection_request => .{ .connection_request = .{
-                .client_guid = try reader.readIntBig(i64),
-                .send_ping_time = try reader.readIntBig(i64),
+                .client_guid = try reader.readInt(i64, .big),
+                .send_ping_time = try reader.readInt(i64, .big),
                 .use_security = try reader.readByte() == 1,
             } },
             // .connection_request_accepted => @panic("ConnectionRequestAccepted is not implemented"),
