@@ -14,8 +14,15 @@ guid: i64,
 /// The socket that is used to send and receive packets
 connected_socket: ?network.Socket = null,
 
+/// The options used to configure the client
+const ClientOptions = struct {
+    allocator: std.mem.Allocator,
+    guid: ?i64 = null,
+    verbose: bool = false,
+};
+
 /// Initializes a new Client from the given options
-pub fn init(options: struct { allocator: std.mem.Allocator, guid: ?i64 = null, verbose: bool = false }) Self {
+pub fn init(options: ClientOptions) Self {
     return .{
         .allocator = options.allocator,
         .guid = options.guid orelse blk: {
