@@ -8,23 +8,10 @@ At the moment, this library only supports the master branch of Zig, meaning that
 
 ## Installation
 
-The library can be installed using Zig's in-progress package manager:
+The library can be installed using Zig's package manager:
 
-```js
-// build.zig.zon
-.{
-    .name = "your-project-name",
-    .version = "your-project-version",
-    .dependencies = .{
-        .raknet = .{
-            .url = "https://github.com/sylvrs/zig-raknet/archive/refs/heads/master.tar.gz",
-            // this hash value can be fetched from the error message when trying to build the project
-            // there is no current way to get the hash value automatically as the package manager is
-            // still very much so an *in-progress* project.
-            .hash = "HASHED_VALUE_HERE",
-        },
-    },
-}
+```sh
+zig fetch --save "https://github.com/sylvrs/zig-raknet/archive/refs/heads/master.tar.gz" 
 ```
 
 ```js
@@ -37,9 +24,9 @@ pub fn build(b: *std.Build) void {
     const raknet_module = b.dependency("raknet", .{ .target = target, .optimize = optimize }).module("raknet");
     // ...
     // your executable should be defined already
-    // i'll be using the name "executable" for the sake of this example
-    executable.addModule("raknet", module);
-    executable.addModule("network", network_module);
+    // i'll be using the name "exe" for the sake of this example
+    exe.root_module.addImport("raknet", module);
+    exe.root_module.addImport("network", network_module);
 }
 ```
 
