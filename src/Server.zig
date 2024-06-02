@@ -27,14 +27,17 @@ running: bool = true,
 /// The socket that is created when the server is started
 socket: network.Socket = undefined,
 
-/// Initializes a new Server from the given options
-pub fn init(options: struct {
+/// The options used to initialize a new Server
+const ServerOptions = struct {
     allocator: std.mem.Allocator,
     pong_data: ?[]const u8 = null,
     guid: ?i64 = null,
     endpoint: network.EndPoint,
     verbose: bool = false,
-}) Self {
+};
+
+/// Initializes a new Server from the given options
+pub fn init(options: ServerOptions) Self {
     return .{
         .pong_data = if (options.pong_data) |pong_data| pong_data else "",
         // generate a random guid if none was provided
