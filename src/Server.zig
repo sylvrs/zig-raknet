@@ -41,7 +41,7 @@ pub fn init(options: struct {
         .guid = options.guid orelse blk: {
             var prng = std.rand.DefaultPrng.init(inner: {
                 var seed: u64 = undefined;
-                std.os.getrandom(std.mem.asBytes(&seed)) catch unreachable;
+                std.posix.getrandom(std.mem.asBytes(&seed)) catch unreachable;
                 break :inner seed;
             });
             break :blk prng.random().int(i64);
