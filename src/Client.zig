@@ -62,8 +62,8 @@ fn sendUnconnectedMessage(socket: network.Socket, msg: UnconnectedMessage) !void
 }
 
 test "ensure client properly receives message" {
-    try init();
-    defer deinit();
+    try raknet.init();
+    defer raknet.deinit();
 
     var client = init(.{ .allocator = std.testing.allocator, .verbose = true });
     defer client.deinit();
