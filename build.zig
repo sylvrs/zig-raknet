@@ -6,14 +6,12 @@ pub fn build(b: *std.Build) void {
 
     const network_module = b.dependency("network", .{ .target = target, .optimize = optimize }).module("network");
 
-    const module = b.addModule("raknet", .{
-        .root_source_file = .{ .path = "src/raknet.zig" },
-    });
+    const module = b.addModule("raknet", .{ .root_source_file = b.path("src/raknet.zig") });
     module.addImport("network", network_module);
 
     const server_example = b.addExecutable(.{
         .name = "server_example",
-        .root_source_file = .{ .path = "examples/server_example.zig" },
+        .root_source_file = b.path("examples/server_example.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -26,18 +24,18 @@ pub fn build(b: *std.Build) void {
 
     const client_example = b.addExecutable(.{
         .name = "server_example",
-        .root_source_file = .{ .path = "examples/client_example.zig" },
+        .root_source_file = b.path("examples/client_example.zig"),
         .target = target,
         .optimize = optimize,
     });
     client_example.root_module.addImport("raknet", module);
     client_example.root_module.addImport("network", network_module);
     const client_artifact = b.addRunArtifact(client_example);
-    const client_step = b.step("client_example", "Runs the server example");
+    const client_step = b.step("client_example", "Runs the client example");
     client_step.dependOn(&client_artifact.step);
 
     const main_tests = b.addTest(.{
-        .root_source_file = .{ .path = "src/tests.zig" },
+        .root_source_file = b.path("src/tests.zig"),
         .target = target,
         .optimize = optimize,
     });

@@ -44,8 +44,8 @@ pub const std_options = std.Options{
 };
 
 fn logFn(comptime level: std.log.Level, comptime _: @TypeOf(.EnumLiteral), comptime format: []const u8, args: anytype) void {
-    std.debug.getStderrMutex().lock();
-    defer std.debug.getStderrMutex().unlock();
+    std.debug.lockStdErr();
+    defer std.debug.unlockStdErr();
     const stderr = std.io.getStdErr().writer();
     nosuspend stderr.print("[" ++ comptime level.asText() ++ "] " ++ format ++ "\n", args) catch return;
 }
